@@ -2,9 +2,10 @@ const express = require("express");
 const router = express.Router();
 
 const Student = require("../models/Student");
+const auth = require("../middleware/auth");
 
 // CREATE
-router.post("/", async (req, res) => {
+router.post("/", auth, async (req, res) => {
   try {
     const student = await Student.create(req.body);
     res.status(201).json(student);
@@ -14,7 +15,7 @@ router.post("/", async (req, res) => {
 });
 
 // READ ALL
-router.get("/", async (req, res) => {
+router.get("/", auth, async (req, res) => {
   try {
     const students = await Student.find();
     res.json(students);
@@ -24,7 +25,7 @@ router.get("/", async (req, res) => {
 });
 
 // READ ONE
-router.get("/:id", async (req, res) => {
+router.get("/:id", auth, async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     res.json(student);
@@ -34,7 +35,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // UPDATE
-router.put("/:id", async (req, res) => {
+router.put("/:id", auth, async (req, res) => {
   try {
     const student = await Student.findByIdAndUpdate(
       req.params.id,
@@ -49,7 +50,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // DELETE
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
   try {
     await Student.findByIdAndDelete(req.params.id);
 
