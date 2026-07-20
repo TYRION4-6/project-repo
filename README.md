@@ -65,7 +65,7 @@ A MERN-stack enterprise dashboard built for urban businesses with multiple branc
    ```
    *Note: Runs on `http://localhost:5173`*
 
----
+----
 
 ## 📁 Directory Structure
 ```
