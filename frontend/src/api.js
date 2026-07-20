@@ -65,6 +65,16 @@ export const api = {
         const endpoint = `/products${queryStr ? `?${queryStr}` : ""}`;
         return apiCall(endpoint, "GET", null, token);
     },
+    getProductsPaginated: (filters = {}, token) => {
+        const queryParams = new URLSearchParams();
+        if (filters.outlet) queryParams.append("outlet", filters.outlet);
+        if (filters.page) queryParams.append("page", filters.page);
+        if (filters.limit) queryParams.append("limit", filters.limit);
+        
+        const queryStr = queryParams.toString();
+        const endpoint = `/products${queryStr ? `?${queryStr}` : ""}`;
+        return apiCall(endpoint, "GET", null, token);
+    },
     createProduct: (data, token) => apiCall("/products", "POST", data, token),
     updateProduct: (id, data, token) => apiCall(`/products/${id}`, "PUT", data, token),
     deleteProduct: (id, token) => apiCall(`/products/${id}`, "DELETE", null, token),

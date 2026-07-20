@@ -4,6 +4,7 @@ import Auth from "./components/Auth";
 import DashboardView from "./components/DashboardView";
 import OutletsView from "./components/OutletsView";
 import InventoryView from "./components/InventoryView";
+import ProductManager from "./components/ProductManager";
 import POSView from "./components/POSView";
 import TransactionsView from "./components/TransactionsView";
 import { 
@@ -17,7 +18,8 @@ import {
     CheckCircle2, 
     Info,
     X,
-    Loader2
+    Loader2,
+    Package
 } from "lucide-react";
 
 function App() {
@@ -71,6 +73,7 @@ function App() {
         const titles = {
             dashboard: "Dashboard Overview - MetroRetail",
             outlets: "Manage Branch Outlets - MetroRetail",
+            products: "Product Management - MetroRetail",
             inventory: "Inventory Management Catalog - MetroRetail",
             pos: "POS Transaction Terminal - MetroRetail",
             transactions: "Sales Receipt History - MetroRetail"
@@ -191,6 +194,14 @@ function App() {
                         Outlets
                     </button>
                     <button 
+                        id="tab-products"
+                        className={`sidebar-item ${activeTab === "products" ? "active" : ""}`}
+                        onClick={() => setActiveTab("products")}
+                    >
+                        <Package size={18} />
+                        Products
+                    </button>
+                    <button 
                         id="tab-inventory"
                         className={`sidebar-item ${activeTab === "inventory" ? "active" : ""}`}
                         onClick={() => setActiveTab("inventory")}
@@ -273,6 +284,14 @@ function App() {
                 )}
                 {activeTab === "outlets" && (
                     <OutletsView 
+                        outlets={outlets} 
+                        token={token} 
+                        refreshData={fetchData} 
+                        addToast={addToast} 
+                    />
+                )}
+                {activeTab === "products" && (
+                    <ProductManager 
                         outlets={outlets} 
                         token={token} 
                         refreshData={fetchData} 

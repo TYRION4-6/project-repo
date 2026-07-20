@@ -81,6 +81,34 @@ router.get("/", auth, async (req, res) => {
             filter.$expr = { $lte: ["$stockLevel", "$lowStockAlertThreshold"] };
         }
 
+        // Support optional pagination via page & limit query params
+        // When page is provided, return paginated response; otherwise return flat array for backward compatibility
+        if (req.query.page) {
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 10;
+            const skip = (page - 1) * limit;
+
+            const [products, total] = await Promise.all([
+                Product.find(filter)
+                    .populate("outlet", "name city")
+                    .sort({ name: 1 })
+                    .skip(skip)
+                    .limit(limit),
+                Product.countDocuments(filter)
+            ]);
+
+            return res.json({
+                products,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages: Math.ceil(total / limit)
+                }
+            });
+        }
+
+        // Default: return flat array (backward-compatible for Dashboard, POS, etc.)
         const products = await Product.find(filter)
             .populate("outlet", "name city")
             .sort({ name: 1 });
