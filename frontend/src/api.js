@@ -99,6 +99,6 @@ export const salesAPI = {
       method: "POST",
       body: sale,
     }),
-  getAnalytics: () => apiCall("/sales/analytics"),
+  getAnalytics: (period = "7d") => apiCall(`/sales/analytics?period=${period}`),
 };
 

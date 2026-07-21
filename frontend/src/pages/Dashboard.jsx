@@ -8,6 +8,9 @@ import {
   ShoppingCart,
   AlertTriangle,
   RefreshCw,
+  Coins,
+  Package,
+  Award,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -27,19 +30,27 @@ import {
 
 const COLORS = ["#4F46E5", "#06B6D4", "#10B981", "#F59E0B", "#F43F5E", "#8B5CF6"];
 
+const periodLabels = {
+  today: "Today",
+  "7d": "Last 7 Days",
+  "30d": "Last 30 Days",
+  all: "All Time",
+};
+
 const Dashboard = () => {
+  const [period, setPeriod] = useState("7d");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchAnalytics = async (silent = false) => {
+  const fetchAnalytics = async (silent = false, selectedPeriod = period) => {
     if (!silent) setLoading(true);
     else setIsRefreshing(true);
     
     setError("");
     try {
-      const res = await salesAPI.getAnalytics();
+      const res = await salesAPI.getAnalytics(selectedPeriod);
       setData(res);
     } catch (err) {
       setError(err.message || "Failed to load dashboard metrics");
@@ -50,15 +61,15 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    fetchAnalytics();
+    fetchAnalytics(false, period);
 
     // Live polling for real-time analytics (every 8 seconds)
     const interval = setInterval(() => {
-      fetchAnalytics(true);
+      fetchAnalytics(true, period);
     }, 8000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [period]);
 
   const formatCurrency = (val) => {
     return new Intl.NumberFormat("en-IN", {
@@ -83,7 +94,7 @@ const Dashboard = () => {
         <AlertTriangle size={48} style={{ color: "var(--accent)", marginBottom: "16px" }} />
         <h3 style={{ marginBottom: "8px" }}>Could not load data</h3>
         <p style={{ color: "var(--text-secondary)", marginBottom: "20px" }}>{error}</p>
-        <button className="btn btn-primary" onClick={() => fetchAnalytics()}>
+        <button className="btn btn-primary" onClick={() => fetchAnalytics(false, period)}>
           Try Again
         </button>
       </div>
@@ -100,6 +111,32 @@ const Dashboard = () => {
           <p className="page-description">Real-time outlet performance and sales statistics</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {/* Time Range Selector */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "500" }}>Period:</span>
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              className="filter-select"
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.04)",
+                color: "var(--text-primary)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "var(--border-radius-md)",
+                padding: "8px 12px",
+                fontSize: "13px",
+                fontWeight: "600",
+                cursor: "pointer",
+                outline: "none"
+              }}
+            >
+              <option value="today" style={{ backgroundColor: "var(--bg-sidebar)" }}>Today</option>
+              <option value="7d" style={{ backgroundColor: "var(--bg-sidebar)" }}>Last 7 Days</option>
+              <option value="30d" style={{ backgroundColor: "var(--bg-sidebar)" }}>Last 30 Days</option>
+              <option value="all" style={{ backgroundColor: "var(--bg-sidebar)" }}>All Time</option>
+            </select>
+          </div>
+
           <div className="live-indicator">
             <span className="dot"></span>
             <span>Live Sales Feed</span>
@@ -107,11 +144,131 @@ const Dashboard = () => {
           <button
             className={`btn btn-secondary ${isRefreshing ? "spinning" : ""}`}
             style={{ padding: "10px", display: "flex", alignItems: "center" }}
-            onClick={() => fetchAnalytics(true)}
+            onClick={() => fetchAnalytics(true, period)}
             title="Refresh Live Data"
           >
             <RefreshCw size={16} className={isRefreshing ? "spin-animation" : ""} />
           </button>
+        </div>
+      </div>
+
+      {/* Dynamic Summary Cards for Selected Period */}
+      <div style={{ marginBottom: "28px" }}>
+        <h2 style={{ fontSize: "16px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "16px", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ width: "3px", height: "14px", backgroundColor: "var(--primary)", borderRadius: "2px" }}></span>
+          <span>Period Summary Metrics ({periodLabels[period]})</span>
+        </h2>
+        <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+          {/* Total Sales Card */}
+          <div className="glass-card kpi-card" style={{
+            position: "relative",
+            overflow: "hidden",
+            background: "linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(17, 24, 39, 0.7) 100%)",
+            border: "1px solid rgba(79, 70, 229, 0.2)",
+            boxShadow: "0 8px 32px 0 rgba(79, 70, 229, 0.1)"
+          }}>
+            <div className="kpi-data" style={{ width: "100%" }}>
+              <h3>Total Sales</h3>
+              <div className="value" style={{ color: "var(--text-primary)" }}>{formatCurrency(summary.totalRevenue)}</div>
+              <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                {summary.totalTransactions} transactions
+              </p>
+            </div>
+            <div className="kpi-icon" style={{
+              background: "rgba(79, 70, 229, 0.1)",
+              color: "var(--primary)",
+              border: "1px solid rgba(79, 70, 229, 0.2)"
+            }}>
+              <Coins size={24} />
+            </div>
+            <div style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              width: "100%",
+              height: "3px",
+              background: "linear-gradient(to right, var(--primary), var(--secondary))"
+            }}></div>
+          </div>
+
+          {/* Average Inventory Card */}
+          <div className="glass-card kpi-card" style={{
+            position: "relative",
+            overflow: "hidden",
+            background: "linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(17, 24, 39, 0.7) 100%)",
+            border: "1px solid rgba(6, 182, 212, 0.2)",
+            boxShadow: "0 8px 32px 0 rgba(6, 182, 212, 0.1)"
+          }}>
+            <div className="kpi-data" style={{ width: "100%" }}>
+              <h3>Avg Inventory Level</h3>
+              <div className="value" style={{ color: "var(--text-primary)" }}>
+                {summary.averageInventory} <span style={{ fontSize: "14px", fontWeight: "500", color: "var(--text-secondary)" }}>units/item</span>
+              </div>
+              <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                Across {summary.totalProducts} products
+              </p>
+            </div>
+            <div className="kpi-icon" style={{
+              background: "rgba(6, 182, 212, 0.1)",
+              color: "var(--secondary)",
+              border: "1px solid rgba(6, 182, 212, 0.2)"
+            }}>
+              <Package size={24} />
+            </div>
+            <div style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              width: "100%",
+              height: "3px",
+              background: "linear-gradient(to right, var(--secondary), var(--success))"
+            }}></div>
+          </div>
+
+          {/* Best-Selling Product Card */}
+          <div className="glass-card kpi-card" style={{
+            position: "relative",
+            overflow: "hidden",
+            background: "linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(17, 24, 39, 0.7) 100%)",
+            border: "1px solid rgba(245, 158, 11, 0.2)",
+            boxShadow: "0 8px 32px 0 rgba(245, 158, 11, 0.1)"
+          }}>
+            <div className="kpi-data" style={{ width: "calc(100% - 56px)" }}>
+              <h3>Best-Selling Product</h3>
+              <div className="value" style={{
+                fontSize: "18px",
+                color: "var(--text-primary)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                margin: "4px 0",
+                fontWeight: "700"
+              }} title={summary.bestSellingProduct ? summary.bestSellingProduct.name : "No sales record"}>
+                {summary.bestSellingProduct ? summary.bestSellingProduct.name : "N/A"}
+              </div>
+              <p style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                {summary.bestSellingProduct
+                  ? `${summary.bestSellingProduct.quantity} sold (${formatCurrency(summary.bestSellingProduct.revenue)})`
+                  : "No sales recorded"
+                }
+              </p>
+            </div>
+            <div className="kpi-icon" style={{
+              background: "rgba(245, 158, 11, 0.1)",
+              color: "var(--warning)",
+              border: "1px solid rgba(245, 158, 11, 0.2)"
+            }}>
+              <Award size={24} />
+            </div>
+            <div style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              width: "100%",
+              height: "3px",
+              background: "linear-gradient(to right, var(--warning), var(--accent))"
+            }}></div>
+          </div>
         </div>
       </div>
 
@@ -165,13 +322,13 @@ const Dashboard = () => {
         {/* Sales Over Time Line Chart */}
         <div className="glass-card chart-card">
           <div className="chart-header">
-            <span className="chart-title">Revenue Trend (Last 7 Days)</span>
+            <span className="chart-title">Revenue Trend ({periodLabels[period]})</span>
           </div>
           <div className="chart-wrapper">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={salesOverTime} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="date" stroke="var(--text-secondary)" tickFormatter={(str) => str.split("-").slice(1).join("/")} />
+                <XAxis dataKey="date" stroke="var(--text-secondary)" tickFormatter={(str) => str.includes("-") ? str.split("-").slice(1).join("/") : str} />
                 <YAxis stroke="var(--text-secondary)" />
                 <Tooltip
                   contentStyle={{ backgroundColor: "var(--bg-sidebar)", borderColor: "rgba(255,255,255,0.1)", borderRadius: "8px" }}

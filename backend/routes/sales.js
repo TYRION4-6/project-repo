@@ -103,19 +103,43 @@ router.get("/recent", protect, async (req, res) => {
 // @access  Private
 router.get("/analytics", protect, async (req, res) => {
   try {
-    // 1. Basic Counts & Sums
-    const totalSalesDocs = await Sale.find({});
-    const totalRevenue = totalSalesDocs.reduce((acc, sale) => acc + sale.totalAmount, 0);
-    const totalTransactions = totalSalesDocs.length;
+    const period = req.query.period || "7d";
+    const now = new Date();
+    let startDate;
+    const endDate = now;
+
+    if (period === "today") {
+      startDate = new Date(now);
+      startDate.setHours(0, 0, 0, 0);
+    } else if (period === "30d") {
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 30);
+      startDate.setHours(0, 0, 0, 0);
+    } else if (period === "all") {
+      startDate = new Date(0); // Epoch start
+    } else {
+      // Default to 7d
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 7);
+      startDate.setHours(0, 0, 0, 0);
+    }
+
+    // 1. Fetch filtered Sales
+    const filteredSalesDocs = await Sale.find({
+      date: { $gte: startDate, $lte: endDate }
+    });
+
+    const totalRevenue = filteredSalesDocs.reduce((acc, sale) => acc + sale.totalAmount, 0);
+    const totalTransactions = filteredSalesDocs.length;
 
     const totalOutlets = await Outlet.countDocuments({});
     const totalProducts = await Product.countDocuments({});
     
-    // Low stock alert (stock <= 10)
+    // Low stock alert (stock <= 10) - current snapshot
     const lowStockProducts = await Product.find({ stock: { $lte: 10 } })
       .populate("outlet", "name city");
 
-    // 2. Sales by Outlet
+    // 2. Sales by Outlet (using filtered sales)
     const outletSalesMap = {};
     const outletsList = await Outlet.find({});
     outletsList.forEach(o => {
@@ -127,7 +151,7 @@ router.get("/analytics", protect, async (req, res) => {
       };
     });
 
-    totalSalesDocs.forEach(sale => {
+    filteredSalesDocs.forEach(sale => {
       const oId = sale.outlet.toString();
       if (outletSalesMap[oId]) {
         outletSalesMap[oId].revenue += sale.totalAmount;
@@ -155,7 +179,7 @@ router.get("/analytics", protect, async (req, res) => {
       productMap[p._id.toString()] = p;
     });
 
-    totalSalesDocs.forEach(sale => {
+    filteredSalesDocs.forEach(sale => {
       const pId = sale.product.toString();
       const product = productMap[pId];
       const category = product ? product.category : "Unknown";
@@ -167,34 +191,68 @@ router.get("/analytics", protect, async (req, res) => {
     });
     const salesByCategory = Object.values(categorySalesMap);
 
-    // 5. Sales Over Time (Last 7 days or all history grouped by date)
+    // 5. Sales Over Time grouped by date/hour for the period
     const dateSalesMap = {};
     
-    // Initialize last 7 days with 0 to ensure we have continuous data
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0]; // YYYY-MM-DD
-      dateSalesMap[dateStr] = { date: dateStr, revenue: 0, transactions: 0 };
-    }
-
-    totalSalesDocs.forEach(sale => {
-      const dateStr = new Date(sale.date).toISOString().split("T")[0];
-      if (dateSalesMap[dateStr]) {
+    if (period === "today") {
+      // Initialize hourly buckets for today (00:00 to 23:00)
+      for (let i = 0; i < 24; i++) {
+        const hourStr = `${i.toString().padStart(2, "0")}:00`;
+        dateSalesMap[hourStr] = { date: hourStr, revenue: 0, transactions: 0 };
+      }
+      filteredSalesDocs.forEach(sale => {
+        const saleDate = new Date(sale.date);
+        const hourStr = `${saleDate.getHours().toString().padStart(2, "0")}:00`;
+        if (dateSalesMap[hourStr]) {
+          dateSalesMap[hourStr].revenue += sale.totalAmount;
+          dateSalesMap[hourStr].transactions += 1;
+        }
+      });
+    } else if (period === "7d") {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        const dateStr = d.toISOString().split("T")[0];
+        dateSalesMap[dateStr] = { date: dateStr, revenue: 0, transactions: 0 };
+      }
+      filteredSalesDocs.forEach(sale => {
+        const dateStr = new Date(sale.date).toISOString().split("T")[0];
+        if (dateSalesMap[dateStr]) {
+          dateSalesMap[dateStr].revenue += sale.totalAmount;
+          dateSalesMap[dateStr].transactions += 1;
+        }
+      });
+    } else if (period === "30d") {
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        const dateStr = d.toISOString().split("T")[0];
+        dateSalesMap[dateStr] = { date: dateStr, revenue: 0, transactions: 0 };
+      }
+      filteredSalesDocs.forEach(sale => {
+        const dateStr = new Date(sale.date).toISOString().split("T")[0];
+        if (dateSalesMap[dateStr]) {
+          dateSalesMap[dateStr].revenue += sale.totalAmount;
+          dateSalesMap[dateStr].transactions += 1;
+        }
+      });
+    } else {
+      // "all"
+      filteredSalesDocs.forEach(sale => {
+        const dateStr = new Date(sale.date).toISOString().split("T")[0];
+        if (!dateSalesMap[dateStr]) {
+          dateSalesMap[dateStr] = { date: dateStr, revenue: 0, transactions: 0 };
+        }
         dateSalesMap[dateStr].revenue += sale.totalAmount;
         dateSalesMap[dateStr].transactions += 1;
-      } else {
-        // If outside 7 days but we want to track it if it matches
-        // For simplicity, we just keep the last 7 days in the timeline chart or we add it dynamically.
-        // Let's add it dynamically if it's within the range or let it show up.
-        // Actually, initializing last 7 days is perfect.
-      }
-    });
+      });
+    }
+
     const salesOverTime = Object.values(dateSalesMap).sort((a, b) => a.date.localeCompare(b.date));
 
-    // 6. Top Selling Products
+    // 6. Top Selling Products in the selected period
     const productSalesMap = {};
-    totalSalesDocs.forEach(sale => {
+    filteredSalesDocs.forEach(sale => {
       const pId = sale.product.toString();
       if (!productSalesMap[pId]) {
         productSalesMap[pId] = {
@@ -214,6 +272,49 @@ router.get("/analytics", protect, async (req, res) => {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
 
+    // 7. Calculate Dynamic Average Inventory Level
+    let totalAvgStock = 0;
+    const allSalesForInventory = await Sale.find({});
+    
+    productsList.forEach(p => {
+      const pId = p._id.toString();
+      
+      // Quantity sold AFTER end of period (empty since endDate is now)
+      const salesAfterEnd = allSalesForInventory.filter(s => 
+        s.product.toString() === pId && new Date(s.date) > endDate
+      );
+      const qtyAfterEnd = salesAfterEnd.reduce((sum, s) => sum + s.quantity, 0);
+      
+      // Quantity sold DURING period
+      const salesDuring = allSalesForInventory.filter(s => 
+        s.product.toString() === pId && new Date(s.date) >= startDate && new Date(s.date) <= endDate
+      );
+      const qtyDuring = salesDuring.reduce((sum, s) => sum + s.quantity, 0);
+      
+      const stockEnd = p.stock + qtyAfterEnd;
+      const stockStart = stockEnd + qtyDuring;
+      const avgStockForProduct = (stockStart + stockEnd) / 2;
+      
+      totalAvgStock += avgStockForProduct;
+    });
+    
+    const averageInventory = productsList.length > 0 ? Math.round((totalAvgStock / productsList.length) * 10) / 10 : 0;
+
+    // 8. Find Best-Selling Product in the selected period (by quantity sold)
+    let bestSellingProduct = null;
+    let maxQuantity = 0;
+    Object.values(productSalesMap).forEach(pSales => {
+      if (pSales.quantity > maxQuantity) {
+        maxQuantity = pSales.quantity;
+        bestSellingProduct = {
+          name: pSales.name,
+          sku: pSales.sku,
+          quantity: pSales.quantity,
+          revenue: pSales.revenue
+        };
+      }
+    });
+
     res.json({
       summary: {
         totalRevenue,
@@ -221,6 +322,8 @@ router.get("/analytics", protect, async (req, res) => {
         totalOutlets,
         totalProducts,
         lowStockCount: lowStockProducts.length,
+        averageInventory,
+        bestSellingProduct,
       },
       lowStockProducts,
       salesByOutlet,
