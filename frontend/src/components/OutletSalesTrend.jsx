@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Label } from "recharts";
 import { TrendingUp, Calendar, Filter, Loader2 } from "lucide-react";
 import { api } from "../api";
 
@@ -230,7 +230,7 @@ export default function OutletSalesTrend({ outlets, token, addToast }) {
                     </div>
                 ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+                        <LineChart data={chartData} margin={{ top: 15, right: 10, left: 35, bottom: 25 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
                             <XAxis 
                                 dataKey="period" 
@@ -256,7 +256,15 @@ export default function OutletSalesTrend({ outlets, token, addToast }) {
                                         return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
                                     }
                                 }}
-                            />
+                            >
+                                <Label 
+                                    value="Time Period" 
+                                    offset={-10} 
+                                    position="insideBottom" 
+                                    fill="var(--text-secondary)" 
+                                    style={{ fontSize: "11px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }} 
+                                />
+                            </XAxis>
                             <YAxis 
                                 stroke="var(--text-secondary)" 
                                 fontSize={11} 
@@ -267,7 +275,16 @@ export default function OutletSalesTrend({ outlets, token, addToast }) {
                                     if (val >= 1000) return `₹${(val / 1000).toFixed(0)}k`;
                                     return `₹${val}`;
                                 }}
-                            />
+                            >
+                                <Label 
+                                    value="Revenue (INR)" 
+                                    angle={-90} 
+                                    position="insideLeft" 
+                                    offset={-20}
+                                    fill="var(--text-secondary)" 
+                                    style={{ textAnchor: "middle", fontSize: "11px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }} 
+                                />
+                            </YAxis>
                             <Tooltip 
                                 formatter={(value, name) => [formatCurrency(value), name]}
                                 contentStyle={{ 
