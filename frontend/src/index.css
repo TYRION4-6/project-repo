@@ -188,6 +188,25 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: 0 0 0 3px var(--border-focus);
 }
 
+.form-input.is-invalid,
+.form-select.is-invalid {
+    border-color: var(--color-danger);
+}
+
+.form-input.is-invalid:focus,
+.form-select.is-invalid:focus {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 3px var(--color-danger-light);
+}
+
+.invalid-feedback {
+    display: block;
+    color: var(--color-danger);
+    font-size: 13px;
+    margin-top: 6px;
+    font-weight: 500;
+}
+
 /* Buttons */
 .btn {
     display: inline-flex;

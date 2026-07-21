@@ -10,6 +10,7 @@ export default function OutletsView({ outlets, setOutlets, token, refreshData, a
     const [address, setAddress] = useState("");
     const [phone, setPhone] = useState("");
     const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState({});
 
     // Delete confirmation state
     const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -20,6 +21,7 @@ export default function OutletsView({ outlets, setOutlets, token, refreshData, a
         setCity("");
         setAddress("");
         setPhone("");
+        setErrors({});
         setModalOpen(true);
     };
 
@@ -29,25 +31,32 @@ export default function OutletsView({ outlets, setOutlets, token, refreshData, a
         setCity(outlet.city);
         setAddress(outlet.address);
         setPhone(outlet.phone || "");
+        setErrors({});
         setModalOpen(true);
     };
 
     // Client-side validations
     const validateFields = () => {
+        const newErrors = {};
         if (!name || name.trim().length < 3) {
-            addToast("Outlet Name must be at least 3 characters long", "warning");
-            return false;
+            newErrors.name = "Outlet Name must be at least 3 characters long";
         }
         if (!city) {
-            addToast("Please select a Metro City", "warning");
-            return false;
+            newErrors.city = "Please select a Metro City";
         }
         if (!address || address.trim().length < 5) {
-            addToast("Address must be at least 5 characters long", "warning");
-            return false;
+            newErrors.address = "Address must be at least 5 characters long";
         }
         if (phone && !/^[+0-9\s-]{10,15}$/.test(phone.trim())) {
-            addToast("Please enter a valid phone number (10-15 digits)", "warning");
+            newErrors.phone = "Please enter a valid phone number (10-15 digits)";
+        }
+
+        setErrors(newErrors);
+
+        if (Object.keys(newErrors).length > 0) {
+            // Show the first validation message as a warning toast
+            const firstError = Object.values(newErrors)[0];
+            addToast(firstError, "warning");
             return false;
         }
         return true;
@@ -69,7 +78,6 @@ export default function OutletsView({ outlets, setOutlets, token, refreshData, a
 
         const previousOutlets = [...outlets];
         setLoading(true);
-        setModalOpen(false);
 
         if (editOutlet) {
             // Optimistic update for Edit
@@ -79,9 +87,13 @@ export default function OutletsView({ outlets, setOutlets, token, refreshData, a
                     : outlet
             ));
             addToast("Updating outlet branch...", "info");
+            setModalOpen(false);
 
             try {
-                await api.updateOutlet(editOutlet._id, newOutletData, token);
+                const updated = await api.updateOutlet(editOutlet._id, newOutletData, token);
+                setOutlets(prev => prev.map(outlet => 
+                    outlet._id === editOutlet._id ? updated : outlet
+                ));
                 addToast("Outlet branch updated successfully", "success");
                 refreshData();
             } catch (err) {
@@ -102,9 +114,13 @@ export default function OutletsView({ outlets, setOutlets, token, refreshData, a
 
             setOutlets([optimisticNewOutlet, ...outlets]);
             addToast("Adding new outlet branch...", "info");
+            setModalOpen(false);
 
             try {
-                await api.createOutlet(newOutletData, token);
+                const created = await api.createOutlet(newOutletData, token);
+                setOutlets(prev => prev.map(outlet => 
+                    outlet._id === tempId ? created : outlet
+                ));
                 addToast("New outlet branch added successfully", "success");
                 refreshData();
             } catch (err) {
@@ -253,21 +269,28 @@ export default function OutletsView({ outlets, setOutlets, token, refreshData, a
                                     <input 
                                         id="outlet-name-input"
                                         type="text" 
-                                        className="form-input" 
+                                        className={`form-input ${errors.name ? 'is-invalid' : ''}`} 
                                         placeholder="e.g. Connaught Place Branch"
                                         value={name}
-                                        onChange={(e) => setName(e.target.value)}
+                                        onChange={(e) => {
+                                            setName(e.target.value);
+                                            if (errors.name) setErrors(prev => ({ ...prev, name: null }));
+                                        }}
                                         required
                                     />
+                                    {errors.name && <div className="invalid-feedback">{errors.name}</div>}
                                 </div>
 
                                 <div className="form-group">
                                     <label className="form-label" htmlFor="outlet-city-select">Metro City</label>
                                     <select 
                                         id="outlet-city-select"
-                                        className="form-select"
+                                        className={`form-select ${errors.city ? 'is-invalid' : ''}`}
                                         value={city}
-                                        onChange={(e) => setCity(e.target.value)}
+                                        onChange={(e) => {
+                                            setCity(e.target.value);
+                                            if (errors.city) setErrors(prev => ({ ...prev, city: null }));
+                                        }}
                                         required
                                     >
                                         <option value="">Select a city</option>
@@ -279,6 +302,7 @@ export default function OutletsView({ outlets, setOutlets, token, refreshData, a
                                         <option value="Hyderabad">Hyderabad</option>
                                         <option value="Pune">Pune</option>
                                     </select>
+                                    {errors.city && <div className="invalid-feedback">{errors.city}</div>}
                                 </div>
 
                                 <div className="form-group">
@@ -286,12 +310,16 @@ export default function OutletsView({ outlets, setOutlets, token, refreshData, a
                                     <input 
                                         id="outlet-address-input"
                                         type="text" 
-                                        className="form-input" 
+                                        className={`form-input ${errors.address ? 'is-invalid' : ''}`} 
                                         placeholder="Full address of the outlet"
                                         value={address}
-                                        onChange={(e) => setAddress(e.target.value)}
+                                        onChange={(e) => {
+                                            setAddress(e.target.value);
+                                            if (errors.address) setErrors(prev => ({ ...prev, address: null }));
+                                        }}
                                         required
                                     />
+                                    {errors.address && <div className="invalid-feedback">{errors.address}</div>}
                                 </div>
 
                                 <div className="form-group">
@@ -299,11 +327,15 @@ export default function OutletsView({ outlets, setOutlets, token, refreshData, a
                                     <input 
                                         id="outlet-phone-input"
                                         type="text" 
-                                        className="form-input" 
+                                        className={`form-input ${errors.phone ? 'is-invalid' : ''}`} 
                                         placeholder="e.g. +91 98765 43210"
                                         value={phone}
-                                        onChange={(e) => setPhone(e.target.value)}
+                                        onChange={(e) => {
+                                            setPhone(e.target.value);
+                                            if (errors.phone) setErrors(prev => ({ ...prev, phone: null }));
+                                        }}
                                     />
+                                    {errors.phone && <div className="invalid-feedback">{errors.phone}</div>}
                                 </div>
                             </div>
                             <div className="modal-footer">
