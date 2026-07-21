@@ -71,6 +71,8 @@ export const outletsAPI = {
 export const productsAPI = {
   getAll: (outletId = "") =>
     apiCall(`/products${outletId ? `?outlet=${outletId}` : ""}`),
+  getLowStock: (threshold) =>
+    apiCall(`/products/low-stock${threshold !== undefined ? `?threshold=${threshold}` : ""}`),
   getById: (id) => apiCall(`/products/${id}`),
   create: (product) =>
     apiCall("/products", {

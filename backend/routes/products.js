@@ -20,6 +20,19 @@ router.get("/", protect, async (req, res) => {
   }
 });
 
+// @desc    Get products below a stock threshold
+// @route   GET /products/low-stock
+// @access  Private
+router.get("/low-stock", protect, async (req, res) => {
+  try {
+    const threshold = parseInt(req.query.threshold) || 10;
+    const products = await Product.find({ stock: { $lte: threshold } }).populate("outlet", "name city");
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // @desc    Get product by ID
 // @route   GET /products/:id
 // @access  Private

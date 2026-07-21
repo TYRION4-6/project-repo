@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { salesAPI } from "../api";
 import RecentSalesFeed from "../components/RecentSalesFeed";
+import LowStockWidget from "../components/LowStockWidget";
 import {
   TrendingUp,
   Store,
@@ -89,7 +90,7 @@ const Dashboard = () => {
     );
   }
 
-  const { summary, lowStockProducts, salesByOutlet, salesByCity, salesByCategory, salesOverTime, topSellingProducts } = data;
+  const { summary, salesByOutlet, salesByCity, salesByCategory, salesOverTime, topSellingProducts } = data;
 
   return (
     <div>
@@ -310,45 +311,7 @@ const Dashboard = () => {
         </div>
 
         {/* Low Stock Alerts */}
-        <div className="glass-card" style={{ display: "flex", flexDirection: "column" }}>
-          <h3 style={{ fontSize: "18px", fontWeight: "600", marginBottom: "16px", color: lowStockProducts.length > 0 ? "var(--accent)" : "var(--text-primary)" }}>
-            Inventory Low Stock Alerts
-          </h3>
-          <div className="data-table-container" style={{ flexGrow: 1 }}>
-            {lowStockProducts.length === 0 ? (
-              <div className="empty-state" style={{ color: "var(--success)" }}>
-                ✓ All items are sufficiently stocked.
-              </div>
-            ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Product</th>
-                    <th>Outlet</th>
-                    <th>SKU</th>
-                    <th>Stock Left</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lowStockProducts.map((p) => (
-                    <tr key={p._id}>
-                      <td>{p.name}</td>
-                      <td>{p.outlet ? p.outlet.name : "Unknown"}</td>
-                      <td>
-                        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{p.sku}</span>
-                      </td>
-                      <td>
-                        <span className="badge badge-low-stock" style={{ fontWeight: "bold" }}>
-                          {p.stock} units
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
+        <LowStockWidget />
       </div>
       
       {/* CSS spin animation */}
