@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { Plus, Edit, Trash2, MapPin, Phone, X } from "lucide-react";
 
-export default function OutletsView({ outlets, token, refreshData, addToast }) {
+export default function OutletsView({ outlets, setOutlets, token, refreshData, addToast }) {
     const [modalOpen, setModalOpen] = useState(false);
     const [editOutlet, setEditOutlet] = useState(null); // If not null, we are editing this outlet
     const [name, setName] = useState("");
@@ -60,42 +60,96 @@ export default function OutletsView({ outlets, token, refreshData, addToast }) {
             return;
         }
 
+        const trimmedName = name.trim();
+        const trimmedCity = city;
+        const trimmedAddress = address.trim();
+        const trimmedPhone = phone.trim();
+
         setLoading(true);
-        try {
-            if (editOutlet) {
-                await api.updateOutlet(editOutlet._id, { 
-                    name: name.trim(), 
-                    city, 
-                    address: address.trim(), 
-                    phone: phone.trim() 
-                }, token);
-                addToast("Outlet branch updated successfully", "success");
-            } else {
-                await api.createOutlet({ 
-                    name: name.trim(), 
-                    city, 
-                    address: address.trim(), 
-                    phone: phone.trim() 
-                }, token);
-                addToast("New outlet branch added successfully", "success");
-            }
+        const originalOutlets = [...outlets];
+
+        if (editOutlet) {
+            // Optimistic Update: edit existing
+            const updatedOutlet = {
+                ...editOutlet,
+                name: trimmedName,
+                city: trimmedCity,
+                address: trimmedAddress,
+                phone: trimmedPhone
+            };
+
+            // Update local state immediately
+            setOutlets(outlets.map(o => o._id === editOutlet._id ? updatedOutlet : o));
             setModalOpen(false);
-            refreshData();
-        } catch (err) {
-            addToast(err.message || "Failed to save outlet", "error");
-        } finally {
-            setLoading(false);
+            addToast("Outlet branch updated successfully", "success");
+
+            try {
+                await api.updateOutlet(editOutlet._id, { 
+                    name: trimmedName, 
+                    city: trimmedCity, 
+                    address: trimmedAddress, 
+                    phone: trimmedPhone 
+                }, token);
+                refreshData(); // silent sync
+            } catch (err) {
+                // Revert state
+                setOutlets(originalOutlets);
+                addToast(err.message || "Failed to update outlet. Reverted changes.", "error");
+            } finally {
+                setLoading(false);
+            }
+        } else {
+            // Optimistic Update: add new
+            const tempId = `temp-${Date.now()}`;
+            const newOutlet = {
+                _id: tempId,
+                name: trimmedName,
+                city: trimmedCity,
+                address: trimmedAddress,
+                phone: trimmedPhone,
+                createdAt: new Date().toISOString()
+            };
+
+            // Update local state immediately
+            setOutlets([newOutlet, ...outlets]);
+            setModalOpen(false);
+            addToast("New outlet branch added successfully", "success");
+
+            try {
+                const savedOutlet = await api.createOutlet({ 
+                    name: trimmedName, 
+                    city: trimmedCity, 
+                    address: trimmedAddress, 
+                    phone: trimmedPhone 
+                }, token);
+                // Replace temp outlet with real one
+                setOutlets(prev => prev.map(o => o._id === tempId ? savedOutlet : o));
+                refreshData(); // silent sync
+            } catch (err) {
+                // Revert state
+                setOutlets(originalOutlets);
+                addToast(err.message || "Failed to add outlet. Reverted changes.", "error");
+            } finally {
+                setLoading(false);
+            }
         }
     };
 
     const handleDelete = async (id) => {
+        const originalOutlets = [...outlets];
+
+        // Optimistic Update: delete
+        setOutlets(outlets.filter(o => o._id !== id));
+        setDeleteConfirmId(null);
+        addToast("Outlet and related items deleted successfully", "success");
+
         try {
             await api.deleteOutlet(id, token);
-            addToast("Outlet and related items deleted successfully", "success");
-            setDeleteConfirmId(null);
-            refreshData();
+            refreshData(); // silent sync to update products, sales, analytics
         } catch (err) {
-            addToast(err.message || "Failed to delete outlet", "error");
+            // Revert state
+            setOutlets(originalOutlets);
+            addToast(err.message || "Failed to delete outlet. Reverted deletion.", "error");
         }
     };
 
@@ -139,7 +193,6 @@ export default function OutletsView({ outlets, token, refreshData, addToast }) {
                             <tr>
                                 <th>Name</th>
                                 <th>Location</th>
-                                <th>Contact Phone</th>
                                 <th style={{ textAlign: "right" }}>Actions</th>
                             </tr>
                         </thead>
@@ -153,19 +206,18 @@ export default function OutletsView({ outlets, token, refreshData, addToast }) {
                                         <div style={{ fontWeight: "500", color: "white" }}>
                                             {outlet.address}
                                         </div>
-                                        <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                                            {outlet.city}
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                            <span>{outlet.city}</span>
+                                            {outlet.phone && (
+                                                <>
+                                                    <span style={{ color: "var(--text-muted)" }}>•</span>
+                                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                                        <Phone size={10} style={{ color: "var(--text-secondary)" }} />
+                                                        {outlet.phone}
+                                                    </span>
+                                                </>
+                                            )}
                                         </div>
-                                    </td>
-                                    <td>
-                                        {outlet.phone ? (
-                                            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                                <Phone size={12} style={{ color: "var(--text-secondary)" }} />
-                                                {outlet.phone}
-                                            </span>
-                                        ) : (
-                                            <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>N/A</span>
-                                        )}
                                     </td>
                                     <td style={{ textAlign: "right" }}>
                                         <div style={{ display: "inline-flex", gap: "8px" }}>
@@ -173,6 +225,7 @@ export default function OutletsView({ outlets, token, refreshData, addToast }) {
                                                 className="btn btn-secondary" 
                                                 style={{ padding: "6px 12px", fontSize: "13px" }}
                                                 onClick={() => openEditModal(outlet)}
+                                                disabled={outlet._id.toString().startsWith("temp-")}
                                             >
                                                 <Edit size={14} />
                                                 Edit
@@ -181,6 +234,7 @@ export default function OutletsView({ outlets, token, refreshData, addToast }) {
                                                 className="btn btn-danger" 
                                                 style={{ padding: "6px 12px", fontSize: "13px" }}
                                                 onClick={() => setDeleteConfirmId(outlet._id)}
+                                                disabled={outlet._id.toString().startsWith("temp-")}
                                             >
                                                 <Trash2 size={14} />
                                                 Delete
