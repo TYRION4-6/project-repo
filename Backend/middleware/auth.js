@@ -11,7 +11,7 @@ const User = require("../models/User");
 function logUnauthorized(req, reason) {
   const entry = [
     `[AUTH DENIED]`,
-    `${req.method} ${req.originalUrl}`,
+    `${req.method} ${req.originalUrl || req.url}`,
     `IP=${req.ip}`,
     `Time=${new Date().toISOString()}`,
     `Reason="${reason}"`,
@@ -22,41 +22,71 @@ function logUnauthorized(req, reason) {
 /**
  * Core JWT verification middleware.
  *
- * 1. Extracts the token from the `Authorization: Bearer <token>` header.
+ * 1. Extracts the token from the `Authorization: Bearer <token>` header or `x-auth-token`.
  * 2. Verifies the token signature and expiry against JWT_SECRET.
  * 3. Confirms the referenced user still exists in the database.
- * 4. Attaches `req.user` (decoded payload) for downstream handlers.
+ * 4. Attaches `req.user` (decoded payload with fresh role) for downstream handlers.
  *
  * Returns 401 with a JSON `{ msg }` body on any failure and logs the attempt.
  */
 async function auth(req, res, next) {
-  // --- 1. Extract token from Authorization header ---
-  const authHeader = req.header("Authorization");
+  // --- 1. Extract token from Authorization or x-auth-token header ---
+  const authHeader =
+    req.header("Authorization") ||
+    req.header("authorization") ||
+    req.header("x-auth-token");
 
-  if (!authHeader) {
+  if (!authHeader || !authHeader.trim()) {
     logUnauthorized(req, "No Authorization header provided");
     return res.status(401).json({ msg: "No token, authorization denied" });
   }
 
-  // Expect "Bearer <token>"
-  const parts = authHeader.split(" ");
-  if (parts.length !== 2 || parts[0] !== "Bearer") {
-    logUnauthorized(req, "Invalid token format (expected 'Bearer <token>')");
-    return res.status(401).json({ msg: "Token format is invalid" });
+  let token;
+  const trimmedHeader = authHeader.trim();
+
+  if (trimmedHeader.startsWith("Bearer ") || trimmedHeader.startsWith("bearer ")) {
+    token = trimmedHeader.substring(7).trim();
+  } else if (!trimmedHeader.includes(" ")) {
+    token = trimmedHeader;
+  } else {
+    const parts = trimmedHeader.split(/\s+/);
+    if (parts.length === 2 && (parts[0] === "Bearer" || parts[0] === "bearer")) {
+      token = parts[1];
+    } else {
+      logUnauthorized(req, "Invalid token format (expected 'Bearer <token>')");
+      return res.status(401).json({ msg: "Token format is invalid" });
+    }
   }
 
-  const token = parts[1];
+  if (!token) {
+    logUnauthorized(req, "Empty token provided");
+    return res.status(401).json({ msg: "No token, authorization denied" });
+  }
 
   // --- 2. Verify token validity ---
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "supersecretkeyformetrocitydashboard"
-    );
-    req.user = decoded.user;
+    const jwtSecret =
+      process.env.JWT_SECRET || "supersecretkeyformetrocitydashboard";
+    const decoded = jwt.verify(token, jwtSecret);
+
+    const payloadUser = decoded.user || decoded;
+
+    if (!payloadUser || !payloadUser.id) {
+      logUnauthorized(req, "Invalid token payload structure");
+      return res.status(401).json({ msg: "Token is not valid" });
+    }
+
+    req.user = payloadUser;
 
     // --- 3. Confirm user still exists in the database ---
-    const user = await User.findById(req.user.id);
+    let user;
+    try {
+      user = await User.findById(req.user.id);
+    } catch (dbErr) {
+      logUnauthorized(req, `Invalid user ID in token (${dbErr.message})`);
+      return res.status(401).json({ msg: "Token is not valid" });
+    }
+
     if (!user) {
       logUnauthorized(req, "User not found in database (stale token)");
       return res
@@ -65,7 +95,7 @@ async function auth(req, res, next) {
     }
 
     // Attach fresh role from the database for downstream use
-    req.user.role = user.role || "manager";
+    req.user.role = user.role || req.user.role || "manager";
 
     next();
   } catch (err) {
@@ -100,6 +130,8 @@ async function auth(req, res, next) {
  *
  * Usage:
  *   router.get("/admin-panel", auth, managerOnly, handler);
+ *   // Or at router mount:
+ *   app.use("/api/outlets", auth, managerOnly, outletsRouter);
  */
 function managerOnly(req, res, next) {
   const role = req.user && req.user.role;
@@ -107,7 +139,7 @@ function managerOnly(req, res, next) {
   if (role !== "manager") {
     logUnauthorized(
       req,
-      `Insufficient role (has "${role}", needs "manager")`
+      `Insufficient role (has "${role || "none"}", needs "manager")`
     );
     return res.status(401).json({ msg: "Access denied, managers only" });
   }
@@ -121,3 +153,5 @@ function managerOnly(req, res, next) {
 module.exports = auth;
 module.exports.auth = auth;
 module.exports.managerOnly = managerOnly;
+module.exports.logUnauthorized = logUnauthorized;
+
