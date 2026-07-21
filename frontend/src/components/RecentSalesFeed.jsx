@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { salesAPI, outletsAPI } from "../api";
 import { Clock, Store, ShoppingBag, Radio, RefreshCw, AlertCircle } from "lucide-react";
 
@@ -9,15 +9,21 @@ const RecentSalesFeed = () => {
   const [highlightSaleId, setHighlightSaleId] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [wsStatus, setWsStatus] = useState("disconnected"); // disconnected, connecting, connected
+  
+  const isMountedRef = useRef(true);
 
   const loadInitialFeed = async (silent = false) => {
-    if (!silent) setLoading(true);
-    else setIsRefreshing(true);
+    if (!silent) {
+      setLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
     
     setError("");
     try {
       // 1. Fetch all outlets
       const outletsList = await outletsAPI.getAll();
+      if (!isMountedRef.current) return;
       
       // 2. Query sales by outlet for each outlet (aggregating feed)
       const salesPromises = outletsList.map(async (outlet) => {
@@ -30,6 +36,7 @@ const RecentSalesFeed = () => {
       });
       
       const salesResults = await Promise.all(salesPromises);
+      if (!isMountedRef.current) return;
       
       // 3. Combine and sort feed
       const allSales = salesResults.flat();
@@ -46,25 +53,34 @@ const RecentSalesFeed = () => {
       // Sort by timestamp (newest first)
       uniqueSales.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
       
-      // Keep top 15-20 records
-      setSalesFeed(uniqueSales.slice(0, 15));
+      if (isMountedRef.current) {
+        // Keep top 15-20 records
+        setSalesFeed(uniqueSales.slice(0, 15));
+      }
     } catch (err) {
       console.error("Error aggregating sales feed:", err);
       // Fallback: try using GET /sales/recent
       try {
         const recentSales = await salesAPI.getRecent(15);
-        setSalesFeed(recentSales);
+        if (isMountedRef.current) {
+          setSalesFeed(recentSales);
+        }
       } catch (fallbackErr) {
         console.error("Fallback error loading sales:", fallbackErr);
-        setError("Failed to load initial sales feed");
+        if (isMountedRef.current) {
+          setError("Failed to load initial sales feed");
+        }
       }
     } finally {
-      setLoading(false);
-      setIsRefreshing(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
     }
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadInitialFeed();
 
     let socket;
@@ -73,15 +89,18 @@ const RecentSalesFeed = () => {
     const wsUrl = `ws://localhost:5000${token ? `?token=${token}` : ""}`;
 
     const connectWebSocket = () => {
+      if (!isMountedRef.current) return;
       setWsStatus("connecting");
       socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
+        if (!isMountedRef.current) return;
         console.log("WebSocket connected to live sales feed");
         setWsStatus("connected");
       };
 
       socket.onmessage = (event) => {
+        if (!isMountedRef.current) return;
         try {
           const message = JSON.parse(event.data);
           
@@ -102,7 +121,7 @@ const RecentSalesFeed = () => {
             // Trigger temporary visual highlight
             setHighlightSaleId(newSale._id);
             setTimeout(() => {
-              setHighlightSaleId(null);
+              if (isMountedRef.current) setHighlightSaleId(null);
             }, 3000);
           }
         } catch (err) {
@@ -111,6 +130,7 @@ const RecentSalesFeed = () => {
       };
 
       socket.onclose = () => {
+        if (!isMountedRef.current) return;
         setWsStatus("disconnected");
         console.log("WebSocket disconnected. Retrying in 5 seconds...");
         reconnectTimeout = setTimeout(connectWebSocket, 5000);
@@ -125,6 +145,7 @@ const RecentSalesFeed = () => {
     connectWebSocket();
 
     return () => {
+      isMountedRef.current = false;
       if (socket) socket.close();
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
