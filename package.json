@@ -1,8 +1,0 @@
-{
-  "name": "outlets-inventory-manager",
-  "version": "1.0.0",
-  "description": "Product Inventory Manager for Outlets",
-  "scripts": {
-    "start": "npm start --prefix backend"
-  }
-}
