@@ -35,6 +35,21 @@ const initWebSocket = (server) => {
     });
   });
 
+  // Listen for inventory changes emitted from the backend and broadcast them to all clients
+  salesEmitter.on("inventoryChange", (change) => {
+    console.log(`Broadcasting inventory change: ${change.action}`);
+    const message = JSON.stringify({
+      type: "INVENTORY_CHANGE",
+      data: change,
+    });
+
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
+  });
+
   return wss;
 };
 

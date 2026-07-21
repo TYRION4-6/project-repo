@@ -3,6 +3,7 @@ const router = express.Router();
 const Product = require("../models/Product");
 const Sale = require("../models/Sale");
 const { protect } = require("../middleware/auth");
+const salesEmitter = require("../config/emitter");
 
 // @desc    Get all products
 // @route   GET /products
@@ -67,7 +68,12 @@ router.post("/", protect, async (req, res) => {
       stock,
       outlet,
     });
-    res.status(201).json(product);
+    
+    // Populate outlet info for any listeners
+    const populatedProduct = await Product.findById(product._id).populate("outlet", "name city");
+    salesEmitter.emit("inventoryChange", { action: "create", product: populatedProduct });
+
+    res.status(201).json(populatedProduct);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -94,7 +100,12 @@ router.put("/:id", protect, async (req, res) => {
     product.outlet = outlet || product.outlet;
 
     const updatedProduct = await product.save();
-    res.json(updatedProduct);
+    
+    // Populate outlet info for any listeners
+    const populatedProduct = await Product.findById(updatedProduct._id).populate("outlet", "name city");
+    salesEmitter.emit("inventoryChange", { action: "update", product: populatedProduct });
+
+    res.json(populatedProduct);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -116,6 +127,8 @@ router.delete("/:id", protect, async (req, res) => {
 
     // Delete product
     await Product.deleteOne({ _id: req.params.id });
+
+    salesEmitter.emit("inventoryChange", { action: "delete", productId: req.params.id });
 
     res.json({ message: "Product and associated sales records deleted" });
   } catch (error) {

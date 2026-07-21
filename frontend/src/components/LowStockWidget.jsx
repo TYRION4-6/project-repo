@@ -72,10 +72,10 @@ const LowStockWidget = () => {
         try {
           const message = JSON.parse(event.data);
           
-          // Whenever a new sale is made, it reduces product stock.
-          // Trigger a silent refresh of the low stock list.
-          if (message.type === "NEW_SALE") {
-            console.log("Inventory changed due to sale. Updating low stock list...");
+          // Whenever a new sale is made or inventory is manually updated/deleted/created,
+          // trigger a silent refresh of the low stock list.
+          if (message.type === "NEW_SALE" || message.type === "INVENTORY_CHANGE") {
+            console.log(`Inventory change event (${message.type}) received. Updating low stock list...`);
             fetchLowStock(true);
           }
         } catch (err) {
@@ -86,7 +86,7 @@ const LowStockWidget = () => {
       socket.onclose = () => {
         if (!isMountedRef.current) return;
         setWsStatus("disconnected");
-        console.log("WebSocket closed in LowStockWidget. Reconnecting...");
+        console.log("WebSocket closed in LowStockWidget. Reconnecting in 5s...");
         reconnectTimeout = setTimeout(connectWebSocket, 5000);
       };
 
@@ -121,34 +121,34 @@ const LowStockWidget = () => {
       case "out-of-stock":
         return {
           borderLeft: "4px solid var(--accent)",
-          background: "linear-gradient(90deg, rgba(244, 63, 94, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%)",
           badgeColor: "var(--accent)",
           badgeBg: "rgba(244, 63, 94, 0.15)",
           textGlow: "0 0 8px var(--accent-glow)",
+          className: "severity-out-of-stock"
         };
       case "critical":
         return {
-          borderLeft: "4px solid #EF4444",
-          background: "linear-gradient(90deg, rgba(239, 68, 68, 0.06) 0%, rgba(255, 255, 255, 0.01) 100%)",
-          badgeColor: "#F87171",
-          badgeBg: "rgba(239, 68, 68, 0.12)",
+          borderLeft: "4px solid #F97316",
+          badgeColor: "#FB923C",
+          badgeBg: "rgba(249, 115, 22, 0.15)",
           textGlow: "none",
+          className: "severity-critical"
         };
       case "warning":
         return {
           borderLeft: "4px solid var(--warning)",
-          background: "linear-gradient(90deg, rgba(245, 158, 11, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%)",
           badgeColor: "#FBBF24",
           badgeBg: "rgba(245, 158, 11, 0.12)",
           textGlow: "none",
+          className: "severity-warning"
         };
       default:
         return {
           borderLeft: "4px solid var(--primary)",
-          background: "rgba(255, 255, 255, 0.01)",
           badgeColor: "#818CF8",
           badgeBg: "rgba(79, 70, 229, 0.12)",
           textGlow: "none",
+          className: "severity-attention"
         };
     }
   };
@@ -165,7 +165,7 @@ const LowStockWidget = () => {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "20px" }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <h3 style={{ fontSize: "18px", fontWeight: "600", color: "var(--text-primary)" }}>Low Inventory Radar</h3>
+            <h3 style={{ fontSize: "18px", fontWeight: "600", color: "var(--text-primary)" }}>Low Stock Radar</h3>
             <div 
               style={{ 
                 display: "flex", 
@@ -178,7 +178,7 @@ const LowStockWidget = () => {
                 border: "1px solid rgba(255, 255, 255, 0.05)",
                 color: "var(--text-secondary)"
               }}
-              title={`Websocket connection for inventory: ${wsStatus}`}
+              title={`WebSocket status: ${wsStatus}`}
             >
               <Radio 
                 size={11} 
@@ -293,35 +293,9 @@ const LowStockWidget = () => {
           }}
         >
           {products.length === 0 ? (
-            <div 
-              style={{ 
-                display: "flex", 
-                flexDirection: "column", 
-                alignItems: "center", 
-                justifyContent: "center", 
-                flexGrow: 1, 
-                padding: "40px 20px", 
-                textAlign: "center",
-                background: "linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%)",
-                borderRadius: "16px",
-                border: "1px dashed rgba(16, 185, 129, 0.2)",
-              }}
-            >
-              <div 
-                style={{ 
-                  width: "48px", 
-                  height: "48px", 
-                  borderRadius: "50%", 
-                  backgroundColor: "rgba(16, 185, 129, 0.1)", 
-                  display: "flex", 
-                  alignItems: "center", 
-                  justifyContent: "center", 
-                  color: "var(--success)", 
-                  marginBottom: "16px",
-                  boxShadow: "0 0 15px rgba(16, 185, 129, 0.15)"
-                }}
-              >
-                <ShieldCheck size={26} />
+            <div className="empty-stock-state">
+              <div className="empty-stock-icon-wrapper">
+                <ShieldCheck size={28} />
               </div>
               <h4 style={{ fontSize: "15px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>
                 All Outlets Fully Stocked
@@ -339,10 +313,8 @@ const LowStockWidget = () => {
               return (
                 <div
                   key={product._id}
-                  className="low-stock-item"
+                  className={`low-stock-item ${styles.className}`}
                   style={{
-                    backgroundColor: styles.background,
-                    borderLeft: styles.borderLeft,
                     borderTop: "1px solid rgba(255, 255, 255, 0.03)",
                     borderRight: "1px solid rgba(255, 255, 255, 0.03)",
                     borderBottom: "1px solid rgba(255, 255, 255, 0.03)",
@@ -364,7 +336,7 @@ const LowStockWidget = () => {
                         {severity === "out-of-stock" && (
                           <span 
                             style={{ 
-                              fontSize: "10px", 
+                              fontSize: "9px", 
                               color: "var(--accent)", 
                               backgroundColor: "rgba(244, 63, 94, 0.15)", 
                               padding: "1px 6px", 
@@ -375,6 +347,22 @@ const LowStockWidget = () => {
                             }}
                           >
                             OUT OF STOCK
+                          </span>
+                        )}
+                        {severity === "critical" && (
+                          <span 
+                            style={{ 
+                              fontSize: "9px", 
+                              color: "#F97316", 
+                              backgroundColor: "rgba(249, 115, 22, 0.15)", 
+                              padding: "1px 6px", 
+                              borderRadius: "4px", 
+                              fontWeight: "bold",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px"
+                            }}
+                          >
+                            CRITICAL
                           </span>
                         )}
                       </div>
@@ -405,13 +393,13 @@ const LowStockWidget = () => {
 
                   {/* Row 2: Progress bar representation */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <div style={{ width: "100%", height: "4px", backgroundColor: "rgba(255, 255, 255, 0.05)", borderRadius: "2px", overflow: "hidden" }}>
+                    <div style={{ width: "100%", height: "5px", backgroundColor: "rgba(255, 255, 255, 0.05)", borderRadius: "3px", overflow: "hidden" }}>
                       <div 
                         style={{ 
                           width: `${stockPercentage}%`, 
                           height: "100%", 
                           backgroundColor: styles.badgeColor,
-                          borderRadius: "2px",
+                          borderRadius: "3px",
                           transition: "width 0.4s ease-out" 
                         }} 
                       />
@@ -422,20 +410,26 @@ const LowStockWidget = () => {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                       <Store size={12} style={{ color: "var(--secondary)" }} />
-                      <span>{product.outlet ? `${product.outlet.name} (${product.outlet.city})` : "Unknown Branch"}</span>
+                      <span style={{ fontWeight: "500" }}>
+                        {product.outlet ? `${product.outlet.name} (${product.outlet.city})` : "Unknown Branch"}
+                      </span>
                     </div>
                     
                     <span 
                       style={{ 
                         fontSize: "11px", 
-                        color: severity === "out-of-stock" ? "var(--accent)" : severity === "critical" ? "var(--warning)" : "var(--primary)",
+                        color: severity === "out-of-stock" ? "var(--accent)" : severity === "critical" ? "#F97316" : "var(--primary)",
                         fontWeight: "600",
                         display: "flex",
                         alignItems: "center",
                         gap: "2px"
                       }}
                     >
-                      {severity === "out-of-stock" ? "⚠️ Urgent Restock" : "Needs Restock"}
+                      {severity === "out-of-stock" 
+                        ? "⚠️ Urgent Restock" 
+                        : severity === "critical" 
+                        ? "⚠️ Critical Action Required"
+                        : `Needs ${threshold - product.stock} units`}
                     </span>
                   </div>
                 </div>
@@ -455,8 +449,83 @@ const LowStockWidget = () => {
           to { opacity: 1; transform: translateY(0); }
         }
         .low-stock-item:hover {
-          transform: translateX(2px);
+          transform: translateX(3px) !important;
           background-color: rgba(255, 255, 255, 0.03) !important;
+          border-color: rgba(255, 255, 255, 0.08) !important;
+        }
+        
+        .severity-out-of-stock {
+          border-left: 4px solid var(--accent) !important;
+          background: linear-gradient(90deg, rgba(244, 63, 94, 0.07) 0%, rgba(17, 24, 39, 0.2) 100%) !important;
+          box-shadow: 0 0 12px rgba(244, 63, 94, 0.04);
+          animation: pulseOutOfStock 2.5s infinite alternate ease-in-out, slideInLowStock 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .severity-critical {
+          border-left: 4px solid #F97316 !important;
+          background: linear-gradient(90deg, rgba(249, 115, 22, 0.05) 0%, rgba(17, 24, 39, 0.2) 100%) !important;
+          box-shadow: 0 0 10px rgba(249, 115, 22, 0.03);
+          animation: slideInLowStock 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .severity-warning {
+          border-left: 4px solid var(--warning) !important;
+          background: linear-gradient(90deg, rgba(245, 158, 11, 0.03) 0%, rgba(17, 24, 39, 0.1) 100%) !important;
+        }
+        .severity-attention {
+          border-left: 4px solid var(--primary) !important;
+          background: linear-gradient(90deg, rgba(79, 70, 229, 0.02) 0%, rgba(17, 24, 39, 0.1) 100%) !important;
+        }
+        
+        @keyframes pulseOutOfStock {
+          0% { box-shadow: inset 0 0 4px rgba(244, 63, 94, 0.05), 0 0 8px rgba(244, 63, 94, 0.02); border-color: rgba(244, 63, 94, 0.7); }
+          100% { box-shadow: inset 0 0 10px rgba(244, 63, 94, 0.15), 0 0 14px rgba(244, 63, 94, 0.1); border-color: rgba(244, 63, 94, 1); }
+        }
+
+        @keyframes pulse {
+          0% { opacity: 0.4; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.1); }
+          100% { opacity: 0.4; transform: scale(1); }
+        }
+        
+        .spin-animation {
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        
+        .empty-stock-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          flex-grow: 1;
+          padding: 40px 20px;
+          text-align: center;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+          border-radius: 16px;
+          border: 1px dashed rgba(16, 185, 129, 0.2);
+          animation: slideInLowStock 0.4s ease-out;
+        }
+        
+        .empty-stock-icon-wrapper {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          background-color: rgba(16, 185, 129, 0.1);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--success);
+          margin-bottom: 16px;
+          box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+          animation: floatAnimation 3s ease-in-out infinite;
+        }
+        
+        @keyframes floatAnimation {
+          0% { transform: translateY(0px); }
+          50% { transform: translateY(-4px); }
+          100% { transform: translateY(0px); }
         }
       `}</style>
     </div>
