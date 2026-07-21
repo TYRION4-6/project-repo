@@ -72,9 +72,9 @@ router.post("/register", async (req, res) => {
  * @access  Public
  */
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
 
-  if (!email || !password) {
+  if (!email || !password || typeof email !== "string" || typeof password !== "string" || !email.trim()) {
     return res.status(400).json({ msg: "Please enter email and password" });
   }
 
@@ -82,12 +82,12 @@ router.post("/login", async (req, res) => {
 
   try {
     // 1. Find user by normalized email
-    let user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(400).json({ msg: "Invalid credentials" });
     }
 
-    // 2. Compare hashed password using bcrypt
+    // 2. Compare hashed password securely using bcrypt
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(400).json({ msg: "Invalid credentials" });
@@ -96,7 +96,7 @@ router.post("/login", async (req, res) => {
     // 3. Issue JWT Token on successful authentication
     const payload = {
       user: {
-        id: user.id,
+        id: user._id.toString(),
         name: user.name,
         email: user.email,
         role: user.role || "manager",
@@ -110,9 +110,16 @@ router.post("/login", async (req, res) => {
       jwtSecret,
       { expiresIn: "7d" },
       (err, token) => {
-        if (err) throw err;
+        if (err) {
+          console.error("JWT Sign error:", err);
+          return res.status(500).json({ msg: "Server error issuing authentication token" });
+        }
         // 4. Return token and user info in response
-        res.status(200).json({ token, user: payload.user });
+        return res.status(200).json({
+          msg: "Login successful",
+          token,
+          user: payload.user,
+        });
       }
     );
   } catch (err) {
