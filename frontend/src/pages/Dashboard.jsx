@@ -4,7 +4,6 @@ import RecentSalesFeed from "../components/RecentSalesFeed";
 import {
   TrendingUp,
   Store,
-  Package,
   ShoppingCart,
   AlertTriangle,
   RefreshCw,

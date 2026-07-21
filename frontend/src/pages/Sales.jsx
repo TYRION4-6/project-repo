@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { salesAPI, outletsAPI, productsAPI } from "../api";
-import { ShoppingBag, RefreshCw, AlertTriangle, ShieldCheck, ShieldAlert } from "lucide-react";
+import { ShoppingBag, AlertTriangle, ShieldCheck, ShieldAlert } from "lucide-react";
 import RecentSalesFeed from "../components/RecentSalesFeed";
 
 const Sales = () => {
-  const [sales, setSales] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [products, setProducts] = useState([]); // Filtered products for form
   const [loading, setLoading] = useState(true);
@@ -127,14 +126,6 @@ const Sales = () => {
       currency: "INR",
       maximumFractionDigits: 0,
     }).format(val);
-  };
-
-  const formatDate = (dateStr) => {
-    const d = new Date(dateStr);
-    return `${d.toLocaleDateString("en-IN")} ${d.toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}`;
   };
 
   return (

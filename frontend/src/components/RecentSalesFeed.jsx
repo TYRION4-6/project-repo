@@ -55,6 +55,7 @@ const RecentSalesFeed = () => {
         const recentSales = await salesAPI.getRecent(15);
         setSalesFeed(recentSales);
       } catch (fallbackErr) {
+        console.error("Fallback error loading sales:", fallbackErr);
         setError("Failed to load initial sales feed");
       }
     } finally {
@@ -139,10 +140,12 @@ const RecentSalesFeed = () => {
 
   const formatTime = (dateStr) => {
     const d = new Date(dateStr);
-    return d.toLocaleTimeString("en-IN", {
+    return d.toLocaleString("en-IN", {
+      month: "short",
+      day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit",
+      hour12: true,
     });
   };
 
