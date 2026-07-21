@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { outletsAPI } from "../api";
+import { outletsAPI, productsAPI } from "../api";
 import { Plus, Edit, Trash2, MapPin, Phone, X, ShieldAlert } from "lucide-react";
 
 const Outlets = () => {
@@ -7,15 +7,23 @@ const Outlets = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   
-  // Modal state
-  const [modalOpen, setModalOpen] = useState(false);
+  // Drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedOutlet, setSelectedOutlet] = useState(null); // null for create, outlet object for view/edit
+  const [isEditMode, setIsEditMode] = useState(false); // false for view details, true for editing/creating
+  
   const [editId, setEditId] = useState(null); // null for create, id for update
   const [name, setName] = useState("");
-  const [city, setCity] = useState("");
+  const [city, setCity] = useState("Mumbai");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [submitLoading, setSubmitLoading] = useState(false);
+
+  // Stats state for viewed outlet
+  const [outletProducts, setOutletProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [productsError, setProductsError] = useState("");
 
   const fetchOutlets = async () => {
     setLoading(true);
@@ -34,26 +42,58 @@ const Outlets = () => {
     fetchOutlets();
   }, []);
 
-  const openCreateModal = () => {
+  const openCreateDrawer = () => {
+    setSelectedOutlet(null);
     setEditId(null);
     setName("");
     setCity("Mumbai");
     setAddress("");
     setPhone("");
     setSubmitError("");
-    setError(""); // Clear general errors when opening modal
-    setModalOpen(true);
+    setError(""); // Clear general errors when opening drawer
+    setIsEditMode(true);
+    setDrawerOpen(true);
   };
 
-  const openEditModal = (outlet) => {
+  const openViewDrawer = async (outlet) => {
+    setSelectedOutlet(outlet);
     setEditId(outlet._id);
     setName(outlet.name);
     setCity(outlet.city);
     setAddress(outlet.address);
     setPhone(outlet.phone);
     setSubmitError("");
-    setError(""); // Clear general errors when opening modal
-    setModalOpen(true);
+    setError(""); // Clear general errors when opening drawer
+    setIsEditMode(false);
+    setDrawerOpen(true);
+
+    // Fetch products statistics
+    setLoadingProducts(true);
+    setProductsError("");
+    setOutletProducts([]);
+    try {
+      const data = await productsAPI.getAll(outlet._id);
+      setOutletProducts(data);
+    } catch (err) {
+      console.error(err);
+      setProductsError("Failed to load products statistics.");
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  const openEditDrawer = (e, outlet) => {
+    e.stopPropagation(); // Prevent opening view drawer
+    setSelectedOutlet(outlet);
+    setEditId(outlet._id);
+    setName(outlet.name);
+    setCity(outlet.city);
+    setAddress(outlet.address);
+    setPhone(outlet.phone);
+    setSubmitError("");
+    setError(""); // Clear general errors when opening drawer
+    setIsEditMode(true);
+    setDrawerOpen(true);
   };
 
   const handleSubmit = async (e) => {
@@ -101,8 +141,8 @@ const Outlets = () => {
         )
       );
 
-      // Close the modal immediately
-      setModalOpen(false);
+      // Close the drawer immediately
+      setDrawerOpen(false);
       setError("");
 
       try {
@@ -123,7 +163,7 @@ const Outlets = () => {
       setSubmitLoading(true);
       try {
         await outletsAPI.create(outletData);
-        setModalOpen(false);
+        setDrawerOpen(false);
         fetchOutlets();
       } catch (err) {
         setSubmitError(err.message || "Operation failed");
@@ -133,7 +173,8 @@ const Outlets = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (e, id) => {
+    e.stopPropagation(); // Prevent opening view drawer
     if (
       window.confirm(
         "Are you sure you want to delete this outlet? All products and sales associated with this outlet will be permanently deleted."
@@ -148,6 +189,9 @@ const Outlets = () => {
     }
   };
 
+  // Helper to calculate statistics
+  const totalStockValue = outletProducts.reduce((sum, p) => sum + (p.price * p.stock), 0);
+
   return (
     <div>
       <div className="page-header">
@@ -155,7 +199,7 @@ const Outlets = () => {
           <h1 className="page-title">Manage Outlets</h1>
           <p className="page-description">Add and manage metro city business locations</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreateModal}>
+        <button className="btn btn-primary" onClick={openCreateDrawer}>
           <Plus size={18} />
           <span>Add Outlet</span>
         </button>
@@ -179,14 +223,27 @@ const Outlets = () => {
           <p style={{ color: "var(--text-secondary)", marginBottom: "20px" }}>
             Add your first metro outlet branch to begin tracking inventory and sales.
           </p>
-          <button className="btn btn-primary" onClick={openCreateModal}>
+          <button className="btn btn-primary" onClick={openCreateDrawer}>
             Add Outlet
           </button>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "24px" }}>
           {outlets.map((outlet) => (
-            <div key={outlet._id} className="glass-card" style={{ display: "flex", flexDirection: "column", justifyContent: "between", position: "relative" }}>
+            <div
+              key={outlet._id}
+              className="glass-card"
+              onClick={() => openViewDrawer(outlet)}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "between",
+                position: "relative",
+                cursor: "pointer",
+                border: selectedOutlet?._id === outlet._id ? "1px solid var(--primary)" : "1px solid rgba(255, 255, 255, 0.05)",
+                boxShadow: selectedOutlet?._id === outlet._id ? "0 0 15px var(--primary-glow)" : "none"
+              }}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "12px" }}>
                 <div>
                   <h3 style={{ fontSize: "18px", fontWeight: "600", marginBottom: "4px" }}>{outlet.name}</h3>
@@ -195,10 +252,10 @@ const Outlets = () => {
                   </span>
                 </div>
                 <div className="row-actions">
-                  <button className="icon-btn" onClick={() => openEditModal(outlet)} title="Edit Outlet">
+                  <button className="icon-btn" onClick={(e) => openEditDrawer(e, outlet)} title="Edit Outlet">
                     <Edit size={16} />
                   </button>
-                  <button className="icon-btn danger" onClick={() => handleDelete(outlet._id)} title="Delete Outlet">
+                  <button className="icon-btn danger" onClick={(e) => handleDelete(e, outlet._id)} title="Delete Outlet">
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -219,94 +276,215 @@ const Outlets = () => {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
-      {modalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content glass-card">
-            <div className="modal-header">
-              <h3 className="modal-title">{editId ? "Edit Outlet" : "Add Metro Outlet"}</h3>
-              <button className="modal-close" onClick={() => setModalOpen(false)}>
-                <X size={20} />
-              </button>
+      {/* Slide-out Drawer */}
+      <div className={`drawer-overlay ${drawerOpen ? "open" : ""}`} onClick={() => setDrawerOpen(false)}>
+        <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
+          <div className="drawer-header">
+            <h3 className="drawer-title">
+              {!selectedOutlet ? "Add Metro Outlet" : isEditMode ? "Edit Outlet" : "Outlet Details"}
+            </h3>
+            <button className="drawer-close" onClick={() => setDrawerOpen(false)}>
+              <X size={22} />
+            </button>
+          </div>
+
+          {submitError && (
+            <div className="alert alert-danger" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
+              <ShieldAlert size={18} />
+              <span>{submitError}</span>
             </div>
+          )}
 
-            {submitError && (
-              <div className="alert alert-danger" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <ShieldAlert size={18} />
-                <span>{submitError}</span>
+          {!isEditMode && selectedOutlet ? (
+            /* --- VIEW MODE --- */
+            <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <div className="drawer-section">
+                <div className="drawer-section-title">Location Info</div>
+                <div className="detail-row">
+                  <span className="detail-label">Name</span>
+                  <span className="detail-value">{selectedOutlet.name}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">City</span>
+                  <span className="detail-value">
+                    <span className="badge" style={{ backgroundColor: "rgba(79, 70, 229, 0.15)", color: "#818CF8", border: "1px solid rgba(79, 70, 229, 0.3)" }}>
+                      {selectedOutlet.city}
+                    </span>
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Address</span>
+                  <span className="detail-value">{selectedOutlet.address}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Contact</span>
+                  <span className="detail-value">{selectedOutlet.phone}</span>
+                </div>
               </div>
-            )}
 
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label htmlFor="outlet-name">Name</label>
-                <input
-                  id="outlet-name"
-                  type="text"
-                  placeholder="e.g. Metro Hub Bandra"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
+              <div className="drawer-section">
+                <div className="drawer-section-title">Inventory Performance</div>
+                <div className="drawer-stats">
+                  <div className="drawer-stat-card">
+                    <div className="drawer-stat-label">Stocked Products</div>
+                    <div className="drawer-stat-value">
+                      {loadingProducts ? "..." : outletProducts.length}
+                    </div>
+                  </div>
+                  <div className="drawer-stat-card">
+                    <div className="drawer-stat-label">Total Value</div>
+                    <div className="drawer-stat-value" style={{ color: "var(--secondary)" }}>
+                      {loadingProducts ? "..." : `₹${totalStockValue.toLocaleString("en-IN")}`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="drawer-section-title" style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                  Product List
+                </div>
+                {loadingProducts ? (
+                  <div style={{ display: "flex", justifyContent: "center", padding: "20px" }}>
+                    <div className="dot" style={{ width: "16px", height: "16px" }}></div>
+                  </div>
+                ) : productsError ? (
+                  <p style={{ color: "var(--accent)", fontSize: "13px" }}>{productsError}</p>
+                ) : outletProducts.length === 0 ? (
+                  <p style={{ color: "var(--text-muted)", fontSize: "13px", fontStyle: "italic" }}>
+                    No products added to this outlet yet.
+                  </p>
+                ) : (
+                  <div className="product-list-mini">
+                    {outletProducts.map((product) => (
+                      <div key={product._id} className="product-item-mini">
+                        <div>
+                          <div className="product-name-mini">{product.name}</div>
+                          <div className="product-sku-mini">{product.sku} | {product.category}</div>
+                        </div>
+                        <div className="product-stock-mini">
+                          <span className={`badge ${product.stock <= 10 ? "badge-low-stock" : "badge-in-stock"}`}>
+                            {product.stock} units
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="form-group">
-                <label htmlFor="outlet-city">City</label>
-                <select
-                  id="outlet-city"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  required
+              <div className="drawer-footer-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => setDrawerOpen(false)}
                 >
-                  <option value="Mumbai">Mumbai</option>
-                  <option value="Delhi">Delhi</option>
-                  <option value="Bangalore">Bangalore</option>
-                  <option value="Kolkata">Kolkata</option>
-                  <option value="Chennai">Chennai</option>
-                  <option value="Hyderabad">Hyderabad</option>
-                  <option value="Pune">Pune</option>
-                </select>
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  onClick={() => setIsEditMode(true)}
+                >
+                  <Edit size={16} />
+                  <span>Edit Details</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* --- EDIT/CREATE MODE --- */
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <div style={{ flexGrow: 1 }}>
+                <div className="form-group">
+                  <label htmlFor="outlet-name">Outlet Name</label>
+                  <input
+                    id="outlet-name"
+                    type="text"
+                    placeholder="e.g. Metro Hub Bandra"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="outlet-city">City</label>
+                  <select
+                    id="outlet-city"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    required
+                  >
+                    <option value="Mumbai">Mumbai</option>
+                    <option value="Delhi">Delhi</option>
+                    <option value="Bangalore">Bangalore</option>
+                    <option value="Kolkata">Kolkata</option>
+                    <option value="Chennai">Chennai</option>
+                    <option value="Hyderabad">Hyderabad</option>
+                    <option value="Pune">Pune</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="outlet-address">Address</label>
+                  <textarea
+                    id="outlet-address"
+                    rows="3"
+                    placeholder="e.g. Linking Road, Bandra West"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    required
+                    style={{
+                      resize: "none",
+                      width: "100%",
+                      backgroundColor: "rgba(255, 255, 255, 0.03)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: "10px",
+                      padding: "12px",
+                      color: "white"
+                    }}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="outlet-phone">Contact Number</label>
+                  <input
+                    id="outlet-phone"
+                    type="text"
+                    placeholder="e.g. +91 22 26401234"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="outlet-address">Address</label>
-                <textarea
-                  id="outlet-address"
-                  rows="3"
-                  placeholder="e.g. Linking Road, Bandra West"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  required
-                  style={{ resize: "none", width: "100%", backgroundColor: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", padding: "12px", color: "white" }}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="outlet-phone">Contact</label>
-                <input
-                  id="outlet-phone"
-                  type="text"
-                  placeholder="e.g. +91 22 26401234"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>
+              <div className="drawer-footer-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    if (selectedOutlet) {
+                      setIsEditMode(false);
+                    } else {
+                      setDrawerOpen(false);
+                    }
+                  }}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={submitLoading}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={submitLoading}>
                   {submitLoading ? "Saving..." : editId ? "Update Outlet" : "Create Outlet"}
                 </button>
               </div>
             </form>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };
 
 export default Outlets;
+
