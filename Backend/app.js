@@ -8,6 +8,9 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const connectDB = require("./config/db");
 
+// Middleware — JWT verification + role-based access control
+const { auth, managerOnly } = require("./middleware/auth");
+
 // Routes
 const authRouter = require("./routes/auth");
 const outletsRouter = require("./routes/outlets");
@@ -33,12 +36,19 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Register routes
+// ── Route registration ──────────────────────────────────────────────
+// Public routes (no JWT required)
 app.use("/api/auth", authRouter);
-app.use("/api/outlets", outletsRouter);
-app.use("/api/products", productsRouter);
-app.use("/api/sales", salesRouter);
-app.use("/api/students", studentsRouter);
+
+// Dashboard routes — JWT + manager role enforced at the mount level.
+// Every request hitting these paths passes through auth → managerOnly
+// before reaching any handler inside the router.
+app.use("/api/outlets", auth, managerOnly, outletsRouter);
+app.use("/api/products", auth, managerOnly, productsRouter);
+app.use("/api/sales", auth, managerOnly, salesRouter);
+
+// General-purpose routes — JWT required, any role allowed
+app.use("/api/students", auth, studentsRouter);
 
 app.use(function (req, res, next) {
   next(createError(404));

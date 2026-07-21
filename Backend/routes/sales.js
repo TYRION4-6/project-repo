@@ -3,12 +3,15 @@ const router = express.Router();
 const Sale = require("../models/Sale");
 const Product = require("../models/Product");
 const Outlet = require("../models/Outlet");
-const auth = require("../middleware/auth");
+const { auth, managerOnly } = require("../middleware/auth");
+
+// Defence-in-depth: enforce JWT + manager role at the router level.
+router.use(auth, managerOnly);
 
 // @route   POST /sales
 // @desc    Record a new sales transaction & update stock
-// @access  Private
-router.post("/", auth, async (req, res) => {
+// @access  Private (Manager)
+router.post("/", async (req, res) => {
   const { outletId, productId, quantity } = req.body;
 
   if (!outletId || !productId || !quantity) {
@@ -78,8 +81,8 @@ router.post("/", auth, async (req, res) => {
 
 // @route   GET /sales
 // @desc    Get sales history
-// @access  Private
-router.get("/", auth, async (req, res) => {
+// @access  Private (Manager)
+router.get("/", async (req, res) => {
   try {
     const sales = await Sale.find()
       .populate("productId", "name sku category price")
@@ -94,8 +97,8 @@ router.get("/", auth, async (req, res) => {
 
 // @route   GET /sales/analytics
 // @desc    Get aggregated sales analytics and dashboard statistics
-// @access  Private
-router.get("/analytics", auth, async (req, res) => {
+// @access  Private (Manager)
+router.get("/analytics", async (req, res) => {
   try {
     // 1. Fetch all data needed for calculations
     const sales = await Sale.find()

@@ -2,12 +2,17 @@ const express = require("express");
 const router = express.Router();
 const Outlet = require("../models/Outlet");
 const Product = require("../models/Product");
-const auth = require("../middleware/auth");
+const { auth, managerOnly } = require("../middleware/auth");
+
+// Defence-in-depth: enforce JWT + manager role at the router level.
+// The app-level mount already applies these, but this ensures protection
+// even if the router is remounted elsewhere without app-level guards.
+router.use(auth, managerOnly);
 
 // @route   GET /outlets
 // @desc    Get all outlets
-// @access  Private
-router.get("/", auth, async (req, res) => {
+// @access  Private (Manager)
+router.get("/", async (req, res) => {
   try {
     const outlets = await Outlet.find().sort({ createdAt: -1 });
     res.json(outlets);
@@ -19,8 +24,8 @@ router.get("/", auth, async (req, res) => {
 
 // @route   POST /outlets
 // @desc    Create a new outlet
-// @access  Private
-router.post("/", auth, async (req, res) => {
+// @access  Private (Manager)
+router.post("/", async (req, res) => {
   const { name, city, address, phone } = req.body;
 
   if (!name || !city || !address || !phone) {
@@ -51,8 +56,8 @@ router.post("/", auth, async (req, res) => {
 
 // @route   PUT /outlets/:id
 // @desc    Update an outlet
-// @access  Private
-router.put("/:id", auth, async (req, res) => {
+// @access  Private (Manager)
+router.put("/:id", async (req, res) => {
   const { name, city, address, phone } = req.body;
 
   // Build update object
@@ -92,8 +97,8 @@ router.put("/:id", auth, async (req, res) => {
 
 // @route   DELETE /outlets/:id
 // @desc    Delete an outlet
-// @access  Private
-router.delete("/:id", auth, async (req, res) => {
+// @access  Private (Manager)
+router.delete("/:id", async (req, res) => {
   try {
     const outlet = await Outlet.findById(req.params.id);
     if (!outlet) {

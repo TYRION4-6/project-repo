@@ -2,12 +2,15 @@ const express = require("express");
 const router = express.Router();
 const Product = require("../models/Product");
 const Outlet = require("../models/Outlet");
-const auth = require("../middleware/auth");
+const { auth, managerOnly } = require("../middleware/auth");
+
+// Defence-in-depth: enforce JWT + manager role at the router level.
+router.use(auth, managerOnly);
 
 // @route   GET /products
 // @desc    Get all products
-// @access  Private
-router.get("/", auth, async (req, res) => {
+// @access  Private (Manager)
+router.get("/", async (req, res) => {
   try {
     const products = await Product.find()
       .populate("stock.outletId", "name city")
@@ -21,8 +24,8 @@ router.get("/", auth, async (req, res) => {
 
 // @route   POST /products
 // @desc    Create a new product
-// @access  Private
-router.post("/", auth, async (req, res) => {
+// @access  Private (Manager)
+router.post("/", async (req, res) => {
   const { name, sku, category, price, description, stock } = req.body;
 
   if (!name || !sku || !category || !price) {
@@ -66,8 +69,8 @@ router.post("/", auth, async (req, res) => {
 
 // @route   PUT /products/:id
 // @desc    Update a product
-// @access  Private
-router.put("/:id", auth, async (req, res) => {
+// @access  Private (Manager)
+router.put("/:id", async (req, res) => {
   const { name, sku, category, price, description } = req.body;
 
   // Build update object
@@ -109,8 +112,8 @@ router.put("/:id", auth, async (req, res) => {
 
 // @route   POST /products/:id/stock
 // @desc    Update or add stock level for a specific outlet
-// @access  Private
-router.post("/:id/stock", auth, async (req, res) => {
+// @access  Private (Manager)
+router.post("/:id/stock", async (req, res) => {
   const { outletId, quantity } = req.body;
 
   if (!outletId || quantity === undefined) {
@@ -159,8 +162,8 @@ router.post("/:id/stock", auth, async (req, res) => {
 
 // @route   DELETE /products/:id
 // @desc    Delete a product
-// @access  Private
-router.delete("/:id", auth, async (req, res) => {
+// @access  Private (Manager)
+router.delete("/:id", async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) {

@@ -2,10 +2,15 @@ const express = require("express");
 const router = express.Router();
 
 const Student = require("../models/Student");
-const auth = require("../middleware/auth");
+const { auth } = require("../middleware/auth");
+
+// Defence-in-depth: enforce JWT at the router level.
+// The app-level mount already applies auth, but this ensures protection
+// even if the router is remounted elsewhere without app-level guards.
+router.use(auth);
 
 // CREATE
-router.post("/", auth, async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const student = await Student.create(req.body);
     res.status(201).json(student);
@@ -15,7 +20,7 @@ router.post("/", auth, async (req, res) => {
 });
 
 // READ ALL
-router.get("/", auth, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const students = await Student.find();
     res.json(students);
@@ -25,7 +30,7 @@ router.get("/", auth, async (req, res) => {
 });
 
 // READ ONE
-router.get("/:id", auth, async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     res.json(student);
@@ -35,7 +40,7 @@ router.get("/:id", auth, async (req, res) => {
 });
 
 // UPDATE
-router.put("/:id", auth, async (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
     const student = await Student.findByIdAndUpdate(
       req.params.id,
@@ -50,7 +55,7 @@ router.put("/:id", auth, async (req, res) => {
 });
 
 // DELETE
-router.delete("/:id", auth, async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
     await Student.findByIdAndDelete(req.params.id);
 
