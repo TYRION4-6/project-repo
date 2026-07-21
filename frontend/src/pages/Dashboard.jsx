@@ -115,6 +115,7 @@ const Dashboard = () => {
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "500" }}>Period:</span>
             <select
+              id="dashboard-period-select"
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
               className="filter-select"
@@ -158,9 +159,9 @@ const Dashboard = () => {
           <span style={{ width: "3px", height: "14px", backgroundColor: "var(--primary)", borderRadius: "2px" }}></span>
           <span>Period Summary Metrics ({periodLabels[period]})</span>
         </h2>
-        <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+        <div id="period-summary-grid" className="kpi-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
           {/* Total Sales Card */}
-          <div className="glass-card kpi-card" style={{
+          <div id="summary-total-sales-card" className="glass-card kpi-card" style={{
             position: "relative",
             overflow: "hidden",
             background: "linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(17, 24, 39, 0.7) 100%)",
@@ -192,7 +193,7 @@ const Dashboard = () => {
           </div>
 
           {/* Average Inventory Card */}
-          <div className="glass-card kpi-card" style={{
+          <div id="summary-avg-inventory-card" className="glass-card kpi-card" style={{
             position: "relative",
             overflow: "hidden",
             background: "linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(17, 24, 39, 0.7) 100%)",
@@ -226,7 +227,7 @@ const Dashboard = () => {
           </div>
 
           {/* Best-Selling Product Card */}
-          <div className="glass-card kpi-card" style={{
+          <div id="summary-best-selling-card" className="glass-card kpi-card" style={{
             position: "relative",
             overflow: "hidden",
             background: "linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(17, 24, 39, 0.7) 100%)",
