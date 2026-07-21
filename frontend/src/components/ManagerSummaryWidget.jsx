@@ -10,7 +10,15 @@ import {
     TrendingUp 
 } from "lucide-react";
 
-export default function ManagerSummaryWidget({ token, setActiveTab }) {
+const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+        maximumFractionDigits: 0
+    }).format(amount);
+};
+
+export default function ManagerSummaryWidget({ token, setActiveTab, refreshDashboard }) {
     const [salesTotal, setSalesTotal] = useState(0);
     const [alertCount, setAlertCount] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -20,14 +28,6 @@ export default function ManagerSummaryWidget({ token, setActiveTab }) {
     // Animation triggers
     const [salesPulse, setSalesPulse] = useState(false);
     const [alertPulse, setAlertPulse] = useState(false);
-
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat("en-IN", {
-            style: "currency",
-            currency: "INR",
-            maximumFractionDigits: 0
-        }).format(amount);
-    };
 
     // Load initial data
     const fetchInitialData = useCallback(async () => {
@@ -63,15 +63,30 @@ export default function ManagerSummaryWidget({ token, setActiveTab }) {
             setIsConnected(true);
         };
 
-        salesSource.onmessage = (event) => {
+        salesSource.onmessage = async (event) => {
             try {
                 const sale = JSON.parse(event.data);
                 // Trigger animation
                 setSalesPulse(true);
                 setTimeout(() => setSalesPulse(false), 1000);
 
-                // Update total
+                // Update total locally first
                 setSalesTotal(prev => prev + sale.totalAmount);
+
+                // Update other dashboard components
+                if (refreshDashboard) {
+                    refreshDashboard();
+                }
+
+                // Sync exact total from DB
+                try {
+                    const salesData = await api.getTodaySalesTotal(token);
+                    if (salesData && typeof salesData.todayTotal === "number") {
+                        setSalesTotal(salesData.todayTotal);
+                    }
+                } catch (e) {
+                    console.error("Failed to sync today sales total", e);
+                }
 
                 // Add to recent events
                 const eventMsg = {
@@ -94,6 +109,11 @@ export default function ManagerSummaryWidget({ token, setActiveTab }) {
                     setTimeout(() => setAlertPulse(false), 1000);
                     
                     setAlertCount(data.alertCount);
+
+                    // Update other dashboard components
+                    if (refreshDashboard) {
+                        refreshDashboard();
+                    }
 
                     // Add alert notification to local feed
                     const eventMsg = {
@@ -121,7 +141,7 @@ export default function ManagerSummaryWidget({ token, setActiveTab }) {
             salesSource.close();
             alertsSource.close();
         };
-    }, [token]);
+    }, [token, refreshDashboard]);
 
     return (
         <div className="summary-widget-container" id="realtime-manager-summary">

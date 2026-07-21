@@ -282,6 +282,7 @@ function App() {
                         setActiveTab={setActiveTab}
                         outlets={outlets}
                         token={token}
+                        refreshData={fetchData}
                     />
                 )}
                 {activeTab === "outlets" && (
