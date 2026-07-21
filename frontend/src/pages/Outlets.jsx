@@ -41,6 +41,7 @@ const Outlets = () => {
     setAddress("");
     setPhone("");
     setSubmitError("");
+    setError(""); // Clear general errors when opening modal
     setModalOpen(true);
   };
 
@@ -51,6 +52,7 @@ const Outlets = () => {
     setAddress(outlet.address);
     setPhone(outlet.phone);
     setSubmitError("");
+    setError(""); // Clear general errors when opening modal
     setModalOpen(true);
   };
 
@@ -81,7 +83,6 @@ const Outlets = () => {
       return;
     }
 
-    setSubmitLoading(true);
     const outletData = {
       name: trimmedName,
       city,
@@ -89,18 +90,46 @@ const Outlets = () => {
       phone: trimmedPhone,
     };
 
-    try {
-      if (editId) {
-        await outletsAPI.update(editId, outletData);
-      } else {
-        await outletsAPI.create(outletData);
-      }
+    if (editId) {
+      // Capture the original list for potential rollback
+      const originalOutlets = [...outlets];
+
+      // Optimistically update the UI list
+      setOutlets((prevOutlets) =>
+        prevOutlets.map((item) =>
+          item._id === editId ? { ...item, ...outletData } : item
+        )
+      );
+
+      // Close the modal immediately
       setModalOpen(false);
-      fetchOutlets();
-    } catch (err) {
-      setSubmitError(err.message || "Operation failed");
-    } finally {
-      setSubmitLoading(false);
+      setError("");
+
+      try {
+        setSubmitLoading(true);
+        await outletsAPI.update(editId, outletData);
+        // Background sync to ensure client has exact state (including any auto-generated fields/ordering)
+        const freshOutlets = await outletsAPI.getAll();
+        setOutlets(freshOutlets);
+      } catch (err) {
+        // Rollback to original state on failure and set the page-level error
+        setOutlets(originalOutlets);
+        setError(err.message || "Failed to update outlet. Reverted changes.");
+      } finally {
+        setSubmitLoading(false);
+      }
+    } else {
+      // Standard flow for create
+      setSubmitLoading(true);
+      try {
+        await outletsAPI.create(outletData);
+        setModalOpen(false);
+        fetchOutlets();
+      } catch (err) {
+        setSubmitError(err.message || "Operation failed");
+      } finally {
+        setSubmitLoading(false);
+      }
     }
   };
 
