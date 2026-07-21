@@ -280,6 +280,8 @@ function App() {
                         products={products}
                         addToast={addToast}
                         setActiveTab={setActiveTab}
+                        outlets={outlets}
+                        token={token}
                     />
                 )}
                 {activeTab === "outlets" && (

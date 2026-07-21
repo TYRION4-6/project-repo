@@ -82,5 +82,17 @@ export const api = {
     // Sales endpoints
     recordSale: (data, token) => apiCall("/sales", "POST", data, token),
     getSales: (token) => apiCall("/sales", "GET", null, token),
-    getAnalytics: (token) => apiCall("/sales/analytics", "GET", null, token)
+    getAnalytics: (token) => apiCall("/sales/analytics", "GET", null, token),
+    getSalesTrends: (filters = {}, token) => {
+        const queryParams = new URLSearchParams();
+        if (filters.outlets) queryParams.append("outlets", filters.outlets);
+        if (filters.timeRange) queryParams.append("timeRange", filters.timeRange);
+        if (filters.startDate) queryParams.append("startDate", filters.startDate);
+        if (filters.endDate) queryParams.append("endDate", filters.endDate);
+        if (filters.interval) queryParams.append("interval", filters.interval);
+        
+        const queryStr = queryParams.toString();
+        const endpoint = `/sales/trends${queryStr ? `?${queryStr}` : ""}`;
+        return apiCall(endpoint, "GET", null, token);
+    }
 };

@@ -1,15 +1,15 @@
-import { ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
-import { DollarSign, ShoppingBag, MapPin, AlertTriangle, TrendingUp } from "lucide-react";
+import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { DollarSign, ShoppingBag, MapPin, AlertTriangle } from "lucide-react";
+import OutletSalesTrend from "./OutletSalesTrend";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#06b6d4", "#ec4899", "#8b5cf6"];
 
-export default function DashboardView({ analytics, products, setActiveTab }) {
+export default function DashboardView({ analytics, products, setActiveTab, outlets, token, addToast }) {
     const {
         totalRevenue = 0,
         totalSalesCount = 0,
         lowStockCount = 0,
         activeOutletsCount = 0,
-        salesByDate = [],
         salesByOutlet = [],
         salesByCategory = []
     } = analytics;
@@ -98,33 +98,8 @@ export default function DashboardView({ analytics, products, setActiveTab }) {
                 <>
                     {/* Charts Grid */}
                     <div className="analytics-grid">
-                        {/* Sales Trend Line Chart */}
-                        <div className="chart-card" id="chart-sales-trend">
-                            <div className="chart-header">
-                                <h3 className="chart-title">Revenue Trend (Last 30 Days)</h3>
-                                <TrendingUp size={20} style={{ color: "var(--color-primary)" }} />
-                            </div>
-                            <div className="chart-container">
-                                {salesByDate.length === 0 ? (
-                                    <div className="flex-center" style={{ height: "100%", color: "var(--text-secondary)" }}>
-                                        No transaction data available yet. Add sales in the POS tab to view the trend.
-                                    </div>
-                                ) : (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={salesByDate} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
-                                            <XAxis dataKey="date" stroke="var(--text-secondary)" fontSize={12} tickLine={false} />
-                                            <YAxis stroke="var(--text-secondary)" fontSize={12} tickLine={false} />
-                                            <Tooltip 
-                                                contentStyle={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "8px" }}
-                                                labelStyle={{ color: "white", fontWeight: "bold" }}
-                                            />
-                                            <Line type="monotone" dataKey="revenue" name="Revenue (₹)" stroke="var(--color-primary)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                )}
-                            </div>
-                        </div>
+                        {/* Multi-outlet interactive sales trend chart */}
+                        <OutletSalesTrend outlets={outlets} token={token} addToast={addToast} />
 
                         {/* Category Sales Pie Chart */}
                         <div className="chart-card" id="chart-category-dist">

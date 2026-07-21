@@ -288,4 +288,125 @@ router.get("/analytics", auth, async (req, res) => {
     }
 });
 
+// @route   GET api/sales/trends
+// @desc    Get sales trends (revenue/transactions) per outlet over time
+// @access  Private
+router.get("/trends", auth, async (req, res) => {
+    try {
+        const managerId = new mongoose.Types.ObjectId(req.user.id);
+        
+        // Fetch all outlets belonging to this manager to verify ownership
+        const managerOutlets = await Outlet.find({ manager: managerId });
+        const managerOutletIds = managerOutlets.map(o => o._id.toString());
+        
+        if (managerOutletIds.length === 0) {
+            return res.json([]);
+        }
+
+        // Parse and filter selected outlets
+        let selectedOutletIds = [];
+        if (req.query.outlets) {
+            const outletsQuery = req.query.outlets;
+            const ids = Array.isArray(outletsQuery)
+                ? outletsQuery
+                : outletsQuery.split(",").map(id => id.trim());
+            
+            // Only keep outlets that belong to this manager
+            selectedOutletIds = ids
+                .filter(id => managerOutletIds.includes(id))
+                .map(id => new mongoose.Types.ObjectId(id));
+        } else {
+            selectedOutletIds = managerOutlets.map(o => o._id);
+        }
+
+        if (selectedOutletIds.length === 0) {
+            return res.json([]);
+        }
+
+        // Build match query (filter by outlet and date range)
+        const matchQuery = {
+            outlet: { $in: selectedOutletIds }
+        };
+
+        if (req.query.startDate || req.query.endDate) {
+            matchQuery.date = {};
+            if (req.query.startDate) {
+                matchQuery.date.$gte = new Date(req.query.startDate);
+            }
+            if (req.query.endDate) {
+                matchQuery.date.$lte = new Date(req.query.endDate);
+            }
+        } else if (req.query.timeRange) {
+            const now = new Date();
+            matchQuery.date = {};
+            if (req.query.timeRange === "7d") {
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(now.getDate() - 7);
+                matchQuery.date.$gte = sevenDaysAgo;
+            } else if (req.query.timeRange === "30d") {
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(now.getDate() - 30);
+                matchQuery.date.$gte = thirtyDaysAgo;
+            } else if (req.query.timeRange === "90d") {
+                const ninetyDaysAgo = new Date();
+                ninetyDaysAgo.setDate(now.getDate() - 90);
+                matchQuery.date.$gte = ninetyDaysAgo;
+            }
+            
+            if (Object.keys(matchQuery.date).length === 0) {
+                delete matchQuery.date;
+            }
+        }
+
+        // Determine aggregation period format
+        const interval = req.query.interval || "daily";
+        let dateFormat = "%Y-%m-%d"; // default daily
+        if (interval === "weekly") {
+            dateFormat = "%Y-%U"; // Year-WeekNumber
+        } else if (interval === "monthly") {
+            dateFormat = "%Y-%m"; // Year-Month
+        }
+
+        // Run aggregation
+        const trends = await Sale.aggregate([
+            { $match: matchQuery },
+            {
+                $group: {
+                    _id: {
+                        outlet: "$outlet",
+                        period: { $dateToString: { format: dateFormat, date: "$date" } }
+                    },
+                    revenue: { $sum: "$totalAmount" },
+                    transactions: { $sum: 1 }
+                }
+            },
+            {
+                $lookup: {
+                    from: "outlets",
+                    localField: "_id.outlet",
+                    foreignField: "_id",
+                    as: "outletInfo"
+                }
+            },
+            { $unwind: "$outletInfo" },
+            {
+                $project: {
+                    outletId: "$_id.outlet",
+                    outletName: "$outletInfo.name",
+                    period: "$_id.period",
+                    revenue: 1,
+                    transactions: 1,
+                    _id: 0
+                }
+            },
+            { $sort: { period: 1 } }
+        ]);
+
+        res.json(trends);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server error");
+    }
+});
+
 module.exports = router;
