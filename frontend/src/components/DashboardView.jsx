@@ -1,6 +1,7 @@
 import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { DollarSign, ShoppingBag, MapPin, AlertTriangle } from "lucide-react";
 import OutletSalesTrend from "./OutletSalesTrend";
+import ManagerSummaryWidget from "./ManagerSummaryWidget";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#06b6d4", "#ec4899", "#8b5cf6"];
 
@@ -29,6 +30,8 @@ export default function DashboardView({ analytics, products, setActiveTab, outle
 
     return (
         <div>
+            <ManagerSummaryWidget token={token} setActiveTab={setActiveTab} />
+            
             {/* Stats Cards */}
             <div className="stats-grid">
                 <div className="stat-card" id="stat-revenue">

@@ -83,6 +83,8 @@ export const api = {
     recordSale: (data, token) => apiCall("/sales", "POST", data, token),
     getSales: (token) => apiCall("/sales", "GET", null, token),
     getAnalytics: (token) => apiCall("/sales/analytics", "GET", null, token),
+    getTodaySalesTotal: (token) => apiCall("/sales/today-total", "GET", null, token),
+    getAlertCount: (token) => apiCall("/products/alerts/count", "GET", null, token),
     getSalesTrends: (filters = {}, token) => {
         const queryParams = new URLSearchParams();
         if (filters.outlets) queryParams.append("outlets", filters.outlets);

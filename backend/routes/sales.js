@@ -80,12 +80,17 @@ router.post("/", auth, async (req, res) => {
             recordedBy: req.user.id
         });
 
-        const sale = await newSale.save();
+                const sale = await newSale.save();
         
         // Populate and return
         const populatedSale = await Sale.findById(sale._id)
             .populate("outlet", "name city")
             .populate("items.product", "name sku category");
+
+        // Emit real-time events
+        const dashboardEmitter = require("../utils/eventEmitter");
+        dashboardEmitter.emit("new-sale", populatedSale);
+        dashboardEmitter.emit("alert-change", { managerId: req.user.id });
 
         res.status(201).json(populatedSale);
     } catch (err) {
@@ -407,6 +412,85 @@ router.get("/trends", auth, async (req, res) => {
         console.error(err.message);
         res.status(500).send("Server error");
     }
+});
+
+// @route   GET api/sales/today-total
+// @desc    Get total sales for the day
+// @access  Private
+router.get("/today-total", auth, async (req, res) => {
+    try {
+        const outlets = await Outlet.find({ manager: req.user.id });
+        const outletIds = outlets.map(o => o._id);
+
+        if (outletIds.length === 0) {
+            return res.json({ todayTotal: 0 });
+        }
+
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const salesToday = await Sale.aggregate([
+            {
+                $match: {
+                    outlet: { $in: outletIds },
+                    date: { $gte: startOfToday }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    todayTotal: { $sum: "$totalAmount" }
+                }
+            }
+        ]);
+
+        const todayTotal = salesToday[0]?.todayTotal || 0;
+        res.json({ todayTotal });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server error");
+    }
+});
+
+// @route   GET api/sales/feed
+// @desc    SSE feed for real-time sales transactions
+// @access  Private
+router.get("/feed", auth, async (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const managerId = req.user.id;
+    
+    // Get manager's outlet IDs to filter events
+    let outlets = [];
+    try {
+        outlets = await Outlet.find({ manager: managerId });
+    } catch (err) {
+        console.error("SSE Outlets fetch error", err);
+    }
+    const outletIdsStr = outlets.map(o => o._id.toString());
+
+    const onNewSale = (sale) => {
+        if (sale && sale.outlet && outletIdsStr.includes(sale.outlet._id ? sale.outlet._id.toString() : sale.outlet.toString())) {
+            res.write(`data: ${JSON.stringify(sale)}\n\n`);
+        }
+    };
+
+    const dashboardEmitter = require("../utils/eventEmitter");
+    dashboardEmitter.on("new-sale", onNewSale);
+
+    // Heartbeat every 20 seconds
+    const keepAlive = setInterval(() => {
+        res.write(": keep-alive\n\n");
+    }, 20000);
+
+    req.on("close", () => {
+        clearInterval(keepAlive);
+        dashboardEmitter.removeListener("new-sale", onNewSale);
+        res.end();
+    });
 });
 
 module.exports = router;

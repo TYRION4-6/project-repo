@@ -44,6 +44,8 @@ router.post("/", auth, async (req, res) => {
         });
 
         const product = await newProduct.save();
+        const dashboardEmitter = require("../utils/eventEmitter");
+        dashboardEmitter.emit("alert-change", { managerId: req.user.id });
         res.status(201).json(product);
     } catch (err) {
         console.error(err.message);
@@ -120,6 +122,81 @@ router.get("/", auth, async (req, res) => {
     }
 });
 
+// @route   GET api/products/alerts/count
+// @desc    Get count of active low stock alerts
+// @access  Private
+router.get("/alerts/count", auth, async (req, res) => {
+    try {
+        const outlets = await Outlet.find({ manager: req.user.id });
+        const outletIds = outlets.map(o => o._id);
+
+        if (outletIds.length === 0) {
+            return res.json({ alertCount: 0 });
+        }
+
+        const alertCount = await Product.countDocuments({
+            outlet: { $in: outletIds },
+            $expr: { $lte: ["$stockLevel", "$lowStockAlertThreshold"] }
+        });
+
+        res.json({ alertCount });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server error");
+    }
+});
+
+// @route   GET api/products/alerts/feed
+// @desc    SSE feed for active low stock alerts
+// @access  Private
+router.get("/alerts/feed", auth, async (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const managerId = req.user.id;
+
+    const sendAlertCount = async () => {
+        try {
+            const outlets = await Outlet.find({ manager: managerId });
+            const outletIds = outlets.map(o => o._id);
+            if (outletIds.length === 0) {
+                res.write(`data: ${JSON.stringify({ alertCount: 0 })}\n\n`);
+                return;
+            }
+            const alertCount = await Product.countDocuments({
+                outlet: { $in: outletIds },
+                $expr: { $lte: ["$stockLevel", "$lowStockAlertThreshold"] }
+            });
+            res.write(`data: ${JSON.stringify({ alertCount })}\n\n`);
+        } catch (err) {
+            console.error("Error sending alert count in SSE:", err);
+        }
+    };
+
+    await sendAlertCount();
+
+    const onAlertChange = async (data) => {
+        if (!data || !data.managerId || data.managerId === managerId) {
+            await sendAlertCount();
+        }
+    };
+
+    const dashboardEmitter = require("../utils/eventEmitter");
+    dashboardEmitter.on("alert-change", onAlertChange);
+
+    const keepAlive = setInterval(() => {
+        res.write(": keep-alive\n\n");
+    }, 20000);
+
+    req.on("close", () => {
+        clearInterval(keepAlive);
+        dashboardEmitter.removeListener("alert-change", onAlertChange);
+        res.end();
+    });
+});
+
 // @route   GET api/products/:id
 // @desc    Get a single product details
 // @access  Private
@@ -178,6 +255,9 @@ router.put("/:id", auth, async (req, res) => {
             { new: true }
         );
 
+        const dashboardEmitter = require("../utils/eventEmitter");
+        dashboardEmitter.emit("alert-change", { managerId: req.user.id });
+
         res.json(product);
     } catch (err) {
         console.error(err.message);
@@ -202,6 +282,10 @@ router.delete("/:id", auth, async (req, res) => {
         }
 
         await Product.findByIdAndDelete(req.params.id);
+
+        const dashboardEmitter = require("../utils/eventEmitter");
+        dashboardEmitter.emit("alert-change", { managerId: req.user.id });
+
         res.json({ message: "Product deleted successfully" });
     } catch (err) {
         console.error(err.message);
