@@ -51,7 +51,7 @@ async function auth(req, res, next) {
   try {
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || "fallback_secret_key"
+      process.env.JWT_SECRET || "supersecretkeyformetrocitydashboard"
     );
     req.user = decoded.user;
 

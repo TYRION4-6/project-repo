@@ -5,31 +5,41 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const auth = require("../middleware/auth");
 
-// @route   POST /auth/register
-// @desc    Register a new manager/user
-// @access  Public
+/**
+ * @route   POST /api/auth/register
+ * @desc    Register a new manager/user and return a JWT token
+ * @access  Public
+ */
 router.post("/register", async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role } = req.body;
 
   if (!name || !email || !password) {
     return res.status(400).json({ msg: "Please enter all fields" });
   }
 
+  const normalizedEmail = email.toLowerCase().trim();
+
   try {
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email: normalizedEmail });
     if (user) {
-      return res.status(400).json({ msg: "User already exists with this email" });
+      return res
+        .status(400)
+        .json({ msg: "User already exists with this email" });
     }
 
-    user = new User({ name, email, password });
+    // Securely hash the password using bcrypt
+    const hashedPassword = await User.hashPassword(password);
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(password, salt);
+    user = new User({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: role || "manager",
+    });
 
     await user.save();
 
-    // Create JWT token
+    // Issue JWT Token
     const payload = {
       user: {
         id: user.id,
@@ -39,24 +49,28 @@ router.post("/register", async (req, res) => {
       },
     };
 
+    const jwtSecret = process.env.JWT_SECRET || "supersecretkeyformetrocitydashboard";
+
     jwt.sign(
       payload,
-      process.env.JWT_SECRET || "fallback_secret_key",
+      jwtSecret,
       { expiresIn: "7d" },
       (err, token) => {
         if (err) throw err;
-        res.json({ token, user: payload.user });
+        res.status(201).json({ token, user: payload.user });
       }
     );
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Server error");
+    console.error("Registration error:", err.message);
+    res.status(500).json({ msg: "Server error during registration" });
   }
 });
 
-// @route   POST /auth/login
-// @desc    Authenticate user & get token
-// @access  Public
+/**
+ * @route   POST /api/auth/login
+ * @desc    Authenticate manager/user, check bcrypt hashed password, and issue JWT token
+ * @access  Public
+ */
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -64,52 +78,66 @@ router.post("/login", async (req, res) => {
     return res.status(400).json({ msg: "Please enter email and password" });
   }
 
+  const normalizedEmail = email.toLowerCase().trim();
+
   try {
-    let user = await User.findOne({ email });
+    // 1. Find user by normalized email
+    let user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(400).json({ msg: "Invalid credentials" });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    // 2. Compare hashed password using bcrypt
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(400).json({ msg: "Invalid credentials" });
     }
 
+    // 3. Issue JWT Token on successful authentication
     const payload = {
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: user.role || "manager",
       },
     };
 
+    const jwtSecret = process.env.JWT_SECRET || "supersecretkeyformetrocitydashboard";
+
     jwt.sign(
       payload,
-      process.env.JWT_SECRET || "fallback_secret_key",
+      jwtSecret,
       { expiresIn: "7d" },
       (err, token) => {
         if (err) throw err;
-        res.json({ token, user: payload.user });
+        // 4. Return token and user info in response
+        res.status(200).json({ token, user: payload.user });
       }
     );
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Server error");
+    console.error("Login error:", err.message);
+    res.status(500).json({ msg: "Server error during login" });
   }
 });
 
-// @route   GET /auth/me
-// @desc    Get user data from token
-// @access  Private
+/**
+ * @route   GET /api/auth/me
+ * @desc    Get authenticated user data from token
+ * @access  Private
+ */
 router.get("/me", auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
     res.json(user);
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Server error");
+    console.error("Get user error:", err.message);
+    res.status(500).json({ msg: "Server error" });
   }
 });
 
 module.exports = router;
+

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 
 const UserSchema = new mongoose.Schema({
   name: {
@@ -29,4 +30,16 @@ const UserSchema = new mongoose.Schema({
   },
 });
 
+// Instance method to compare password securely using bcrypt
+UserSchema.methods.comparePassword = async function (candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Static helper method to hash password securely using bcrypt
+UserSchema.statics.hashPassword = async function (password) {
+  const salt = await bcrypt.genSalt(10);
+  return await bcrypt.hash(password, salt);
+};
+
 module.exports = mongoose.model("User", UserSchema);
+
