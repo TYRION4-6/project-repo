@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
 import { 
     DollarSign, 
@@ -30,7 +30,7 @@ export default function ManagerSummaryWidget({ token, setActiveTab }) {
     };
 
     // Load initial data
-    const fetchInitialData = async () => {
+    const fetchInitialData = useCallback(async () => {
         if (!token) return;
         try {
             setLoading(true);
@@ -45,11 +45,11 @@ export default function ManagerSummaryWidget({ token, setActiveTab }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [token]);
 
     useEffect(() => {
         fetchInitialData();
-    }, [token]);
+    }, [token, fetchInitialData]);
 
     // Setup real-time listeners
     useEffect(() => {
