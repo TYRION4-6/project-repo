@@ -285,6 +285,7 @@ function App() {
                 {activeTab === "outlets" && (
                     <OutletsView 
                         outlets={outlets} 
+                        setOutlets={setOutlets}
                         token={token} 
                         refreshData={fetchData} 
                         addToast={addToast} 

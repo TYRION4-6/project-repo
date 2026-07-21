@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { Plus, Edit, Trash2, MapPin, Phone, X } from "lucide-react";
 
-export default function OutletsView({ outlets, token, refreshData, addToast }) {
+export default function OutletsView({ outlets, setOutlets, token, refreshData, addToast }) {
     const [modalOpen, setModalOpen] = useState(false);
     const [editOutlet, setEditOutlet] = useState(null); // If not null, we are editing this outlet
     const [name, setName] = useState("");
@@ -60,41 +60,78 @@ export default function OutletsView({ outlets, token, refreshData, addToast }) {
             return;
         }
 
+        const newOutletData = {
+            name: name.trim(),
+            city,
+            address: address.trim(),
+            phone: phone.trim()
+        };
+
+        const previousOutlets = [...outlets];
         setLoading(true);
-        try {
-            if (editOutlet) {
-                await api.updateOutlet(editOutlet._id, { 
-                    name: name.trim(), 
-                    city, 
-                    address: address.trim(), 
-                    phone: phone.trim() 
-                }, token);
+        setModalOpen(false);
+
+        if (editOutlet) {
+            // Optimistic update for Edit
+            setOutlets(outlets.map(outlet => 
+                outlet._id === editOutlet._id 
+                    ? { ...outlet, ...newOutletData } 
+                    : outlet
+            ));
+            addToast("Updating outlet branch...", "info");
+
+            try {
+                await api.updateOutlet(editOutlet._id, newOutletData, token);
                 addToast("Outlet branch updated successfully", "success");
-            } else {
-                await api.createOutlet({ 
-                    name: name.trim(), 
-                    city, 
-                    address: address.trim(), 
-                    phone: phone.trim() 
-                }, token);
-                addToast("New outlet branch added successfully", "success");
+                refreshData();
+            } catch (err) {
+                // Rollback on error
+                setOutlets(previousOutlets);
+                addToast(err.message || "Failed to update outlet", "error");
+            } finally {
+                setLoading(false);
             }
-            setModalOpen(false);
-            refreshData();
-        } catch (err) {
-            addToast(err.message || "Failed to save outlet", "error");
-        } finally {
-            setLoading(false);
+        } else {
+            // Optimistic update for Add
+            const tempId = `temp_${Date.now()}`;
+            const optimisticNewOutlet = {
+                _id: tempId,
+                ...newOutletData,
+                createdAt: new Date().toISOString()
+            };
+
+            setOutlets([optimisticNewOutlet, ...outlets]);
+            addToast("Adding new outlet branch...", "info");
+
+            try {
+                await api.createOutlet(newOutletData, token);
+                addToast("New outlet branch added successfully", "success");
+                refreshData();
+            } catch (err) {
+                // Rollback on error
+                setOutlets(previousOutlets);
+                addToast(err.message || "Failed to add outlet", "error");
+            } finally {
+                setLoading(false);
+            }
         }
     };
 
     const handleDelete = async (id) => {
+        const previousOutlets = [...outlets];
+        
+        // Optimistic update for Delete
+        setOutlets(outlets.filter(outlet => outlet._id !== id));
+        addToast("Deleting outlet branch...", "info");
+        setDeleteConfirmId(null);
+
         try {
             await api.deleteOutlet(id, token);
-            addToast("Outlet and related items deleted successfully", "success");
-            setDeleteConfirmId(null);
+            addToast("Outlet branch and related items deleted successfully", "success");
             refreshData();
         } catch (err) {
+            // Rollback on error
+            setOutlets(previousOutlets);
             addToast(err.message || "Failed to delete outlet", "error");
         }
     };
@@ -139,7 +176,6 @@ export default function OutletsView({ outlets, token, refreshData, addToast }) {
                             <tr>
                                 <th>Name</th>
                                 <th>Location</th>
-                                <th>Contact Phone</th>
                                 <th style={{ textAlign: "right" }}>Actions</th>
                             </tr>
                         </thead>
@@ -147,7 +183,17 @@ export default function OutletsView({ outlets, token, refreshData, addToast }) {
                             {outlets.map((outlet) => (
                                 <tr key={outlet._id}>
                                     <td style={{ fontWeight: "600", color: "white" }}>
-                                        {outlet.name}
+                                        <div>{outlet.name}</div>
+                                        {outlet.phone ? (
+                                            <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px", display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: "normal" }}>
+                                                <Phone size={12} style={{ color: "var(--text-secondary)" }} />
+                                                {outlet.phone}
+                                            </div>
+                                        ) : (
+                                            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px", fontWeight: "normal" }}>
+                                                No Contact Phone
+                                            </div>
+                                        )}
                                     </td>
                                     <td>
                                         <div style={{ fontWeight: "500", color: "white" }}>
@@ -157,22 +203,13 @@ export default function OutletsView({ outlets, token, refreshData, addToast }) {
                                             {outlet.city}
                                         </div>
                                     </td>
-                                    <td>
-                                        {outlet.phone ? (
-                                            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                                <Phone size={12} style={{ color: "var(--text-secondary)" }} />
-                                                {outlet.phone}
-                                            </span>
-                                        ) : (
-                                            <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>N/A</span>
-                                        )}
-                                    </td>
                                     <td style={{ textAlign: "right" }}>
                                         <div style={{ display: "inline-flex", gap: "8px" }}>
                                             <button 
                                                 className="btn btn-secondary" 
                                                 style={{ padding: "6px 12px", fontSize: "13px" }}
                                                 onClick={() => openEditModal(outlet)}
+                                                disabled={outlet._id.startsWith?.("temp_")}
                                             >
                                                 <Edit size={14} />
                                                 Edit
@@ -181,6 +218,7 @@ export default function OutletsView({ outlets, token, refreshData, addToast }) {
                                                 className="btn btn-danger" 
                                                 style={{ padding: "6px 12px", fontSize: "13px" }}
                                                 onClick={() => setDeleteConfirmId(outlet._id)}
+                                                disabled={outlet._id.startsWith?.("temp_")}
                                             >
                                                 <Trash2 size={14} />
                                                 Delete

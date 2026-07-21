@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
-import { Plus, Edit, Trash2, X, Package, AlertTriangle, ChevronLeft, ChevronRight, Store, Search } from "lucide-react";
+import { Plus, Edit, Trash2, X, Package, AlertTriangle, ChevronLeft, ChevronRight, Store } from "lucide-react";
 
 const ITEMS_PER_PAGE = 10;
 
