@@ -4,6 +4,7 @@ const Sale = require("../models/Sale");
 const Product = require("../models/Product");
 const Outlet = require("../models/Outlet");
 const { protect } = require("../middleware/auth");
+const salesEmitter = require("../config/emitter");
 
 // @desc    Record a new sale (transaction)
 // @route   POST /sales
@@ -52,6 +53,9 @@ router.post("/", protect, async (req, res) => {
       .populate("product", "name price category sku")
       .populate("outlet", "name city");
 
+    // Emit the newSale event to update the WebSocket server and connected clients
+    salesEmitter.emit("newSale", populatedSale);
+
     res.status(201).json(populatedSale);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -63,10 +67,31 @@ router.post("/", protect, async (req, res) => {
 // @access  Private
 router.get("/", protect, async (req, res) => {
   try {
-    const sales = await Sale.find({})
+    const filter = {};
+    if (req.query.outlet) {
+      filter.outlet = req.query.outlet;
+    }
+    const sales = await Sale.find(filter)
       .populate("product", "name price sku category")
       .populate("outlet", "name city")
       .sort({ date: -1 });
+    res.json(sales);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @desc    Get recent sales list across all outlets
+// @route   GET /sales/recent
+// @access  Private
+router.get("/recent", protect, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const sales = await Sale.find({})
+      .populate("product", "name price sku category")
+      .populate("outlet", "name city")
+      .sort({ date: -1 })
+      .limit(limit);
     res.json(sales);
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { salesAPI } from "../api";
+import RecentSalesFeed from "../components/RecentSalesFeed";
 import {
   TrendingUp,
   Store,
@@ -267,6 +268,11 @@ const Dashboard = () => {
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
+
+      {/* Live Sales Feed Row */}
+      <div style={{ marginTop: "24px", marginBottom: "24px" }}>
+        <RecentSalesFeed />
       </div>
 
       {/* Lists Row */}

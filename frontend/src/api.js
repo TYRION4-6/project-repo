@@ -90,6 +90,8 @@ export const productsAPI = {
 
 export const salesAPI = {
   getAll: () => apiCall("/sales"),
+  getRecent: (limit = 20) => apiCall(`/sales/recent?limit=${limit}`),
+  getByOutlet: (outletId) => apiCall(`/sales?outlet=${outletId}`),
   create: (sale) =>
     apiCall("/sales", {
       method: "POST",
@@ -97,3 +99,4 @@ export const salesAPI = {
     }),
   getAnalytics: () => apiCall("/sales/analytics"),
 };
+

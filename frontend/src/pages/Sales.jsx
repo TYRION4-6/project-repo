@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { salesAPI, outletsAPI, productsAPI } from "../api";
 import { ShoppingBag, RefreshCw, AlertTriangle, ShieldCheck, ShieldAlert } from "lucide-react";
+import RecentSalesFeed from "../components/RecentSalesFeed";
 
 const Sales = () => {
   const [sales, setSales] = useState([]);
@@ -24,11 +25,8 @@ const Sales = () => {
     try {
       const outletsData = await outletsAPI.getAll();
       setOutlets(outletsData);
-
-      const salesData = await salesAPI.getAll();
-      setSales(salesData);
     } catch (err) {
-      setError(err.message || "Failed to load transaction data");
+      setError(err.message || "Failed to load outlet data");
     } finally {
       setLoading(false);
     }
@@ -116,10 +114,6 @@ const Sales = () => {
       setSelectedProduct("");
       setSelectedProductData(null);
       setQuantity(1);
-
-      // Refresh recent sales
-      const salesData = await salesAPI.getAll();
-      setSales(salesData);
     } catch (err) {
       setFormError(err.message || "Failed to record transaction");
     } finally {
@@ -288,62 +282,8 @@ const Sales = () => {
             </form>
           </div>
 
-          {/* Recent Sales Section */}
-          <div className="glass-card" style={{ minHeight: "500px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ fontSize: "18px", fontWeight: "600" }}>Recent Transactions</h3>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: "8px", display: "flex", alignItems: "center" }}
-                onClick={fetchOutletsAndSales}
-                title="Refresh Transactions"
-              >
-                <RefreshCw size={14} />
-              </button>
-            </div>
-
-            <div className="data-table-container">
-              {sales.length === 0 ? (
-                <div className="empty-state">No transaction logs recorded.</div>
-              ) : (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Time & Branch</th>
-                      <th>Product</th>
-                      <th>SKU</th>
-                      <th>Qty</th>
-                      <th>Total Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sales.map((sale) => (
-                      <tr key={sale._id}>
-                        <td>
-                          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                            {formatDate(sale.date)}
-                          </div>
-                          <div style={{ fontWeight: "500", marginTop: "2px" }}>
-                            {sale.outlet ? sale.outlet.name : "Deleted Outlet"}
-                          </div>
-                        </td>
-                        <td>{sale.product ? sale.product.name : "Deleted Product"}</td>
-                        <td>
-                          <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                            {sale.product ? sale.product.sku : "N/A"}
-                          </span>
-                        </td>
-                        <td>{sale.quantity}</td>
-                        <td style={{ fontWeight: "600", color: "var(--success)" }}>
-                          {formatCurrency(sale.totalAmount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
+          {/* Live Recent Sales Feed */}
+          <RecentSalesFeed />
         </div>
       )}
     </div>
