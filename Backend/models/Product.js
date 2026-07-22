@@ -12,6 +12,12 @@ const StockItemSchema = new mongoose.Schema({
     min: 0,
     default: 0,
   },
+  threshold: {
+    type: Number,
+    required: true,
+    min: 0,
+    default: 0,
+  },
 }, { _id: false });
 
 const ProductSchema = new mongoose.Schema({

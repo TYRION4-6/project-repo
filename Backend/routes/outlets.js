@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Outlet = require("../models/Outlet");
 const Product = require("../models/Product");
+const Alert = require("../models/Alert");
 const { auth, managerOnly } = require("../middleware/auth");
 
 // Defence-in-depth: enforce JWT + manager role at the router level.
@@ -112,6 +113,9 @@ router.delete("/:id", async (req, res) => {
       {},
       { $pull: { stock: { outletId: req.params.id } } }
     );
+
+    // Delete any active alerts for this outlet
+    await Alert.deleteMany({ outletId: req.params.id });
 
     res.json({ msg: "Outlet removed and product stock items updated" });
   } catch (err) {

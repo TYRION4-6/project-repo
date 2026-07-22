@@ -28,13 +28,15 @@ export default function ProductsView({
     price: "",
     description: "",
     outletId: "",
-    stock: "0"
+    stock: "0",
+    threshold: "0"
   });
 
   // Stock update form data
   const [stockForm, setStockForm] = useState({
     outletId: "",
-    quantity: ""
+    quantity: "",
+    threshold: "0"
   });
 
   const handleOpenCreateProduct = () => {
@@ -46,7 +48,8 @@ export default function ProductsView({
       price: "",
       description: "",
       outletId: outlets.length > 0 ? outlets[0]._id : "",
-      stock: "0"
+      stock: "0",
+      threshold: "0"
     });
     setFormErrors({});
     setSubmitError("");
@@ -69,6 +72,7 @@ export default function ProductsView({
         })
       : null;
     const defaultStockQty = defaultStockItem ? defaultStockItem.quantity : 0;
+    const defaultStockThreshold = defaultStockItem && defaultStockItem.threshold !== undefined ? defaultStockItem.threshold : 0;
 
     setProductForm({
       name: product.name,
@@ -77,7 +81,8 @@ export default function ProductsView({
       price: product.price,
       description: product.description || "",
       outletId: defaultOutletId,
-      stock: defaultStockQty.toString()
+      stock: defaultStockQty.toString(),
+      threshold: defaultStockThreshold.toString()
     });
     setFormErrors({});
     setSubmitError("");
@@ -86,17 +91,20 @@ export default function ProductsView({
 
   const handleOutletChange = (newOutletId) => {
     let stockQty = "0";
+    let stockThreshold = "0";
     if (editingProduct) {
       const stockItem = editingProduct.stock && editingProduct.stock.find(s => {
         const sId = s.outletId?._id || s.outletId;
         return sId === newOutletId;
       });
       stockQty = stockItem ? stockItem.quantity.toString() : "0";
+      stockThreshold = stockItem && stockItem.threshold !== undefined ? stockItem.threshold.toString() : "0";
     }
     setProductForm(prev => ({
       ...prev,
       outletId: newOutletId,
-      stock: stockQty
+      stock: stockQty,
+      threshold: stockThreshold
     }));
   };
 
@@ -145,6 +153,14 @@ export default function ProductsView({
     } else if (stockNum < 0 || !Number.isInteger(stockNum)) {
       errors.stock = "Stock must be a non-negative integer";
     }
+
+    // Threshold validation
+    const thresholdNum = parseInt(productForm.threshold, 10);
+    if (productForm.threshold === "" || isNaN(thresholdNum)) {
+      errors.threshold = "Threshold is required";
+    } else if (thresholdNum < 0 || !Number.isInteger(thresholdNum)) {
+      errors.threshold = "Threshold must be a non-negative integer";
+    }
     
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -152,9 +168,17 @@ export default function ProductsView({
 
   const handleOpenAdjustStock = (product) => {
     setSelectedProduct(product);
+    
+    const defaultOutletId = outlets.length > 0 ? outlets[0]._id : "";
+    const existingStock = product.stock && product.stock.find(s => {
+      const sId = s.outletId?._id || s.outletId;
+      return sId === defaultOutletId;
+    });
+
     setStockForm({
-      outletId: outlets.length > 0 ? outlets[0]._id : "",
-      quantity: ""
+      outletId: defaultOutletId,
+      quantity: existingStock ? existingStock.quantity.toString() : "",
+      threshold: existingStock && existingStock.threshold !== undefined ? existingStock.threshold.toString() : "0"
     });
     setStockModalOpen(true);
   };
@@ -172,6 +196,7 @@ export default function ProductsView({
     try {
       const priceNum = parseFloat(productForm.price);
       const stockNum = parseInt(productForm.stock, 10);
+      const thresholdNum = parseInt(productForm.threshold, 10);
       
       if (editingProduct) {
         // Update product info
@@ -187,7 +212,7 @@ export default function ProductsView({
         
         // Update stock level for the selected outlet
         if (productForm.outletId) {
-          await onUpdateStock(editingProduct._id, productForm.outletId, stockNum);
+          await onUpdateStock(editingProduct._id, productForm.outletId, stockNum, thresholdNum);
         }
       } else {
         // Create product with stock
@@ -197,7 +222,7 @@ export default function ProductsView({
           category: productForm.category.trim(),
           price: priceNum,
           description: productForm.description.trim(),
-          stock: productForm.outletId ? [{ outletId: productForm.outletId, quantity: stockNum }] : []
+          stock: productForm.outletId ? [{ outletId: productForm.outletId, quantity: stockNum, threshold: thresholdNum }] : []
         };
         
         await onCreateProduct(newProductData);
@@ -213,7 +238,12 @@ export default function ProductsView({
   const handleStockSubmit = (e) => {
     e.preventDefault();
     if (!stockForm.outletId) return;
-    onUpdateStock(selectedProduct._id, stockForm.outletId, stockForm.quantity);
+    onUpdateStock(
+      selectedProduct._id, 
+      stockForm.outletId, 
+      parseInt(stockForm.quantity, 10) || 0,
+      parseInt(stockForm.threshold, 10) || 0
+    );
     setStockModalOpen(false);
   };
 
@@ -303,7 +333,8 @@ export default function ProductsView({
                         {product.stock && product.stock.length > 0 ? (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                             {product.stock.map((s, i) => {
-                              const isLow = s.quantity <= 10;
+                              const threshVal = s.threshold !== undefined ? s.threshold : 0;
+                              const isLow = s.quantity < threshVal;
                               return s.outletId ? (
                                 <span 
                                   key={i} 
@@ -311,7 +342,7 @@ export default function ProductsView({
                                   style={{ fontSize: "0.75rem", textTransform: "none" }}
                                   title={`${s.outletId.name} (${s.outletId.city})`}
                                 >
-                                  {s.outletId.name}: {s.quantity}
+                                  {s.outletId.name}: {s.quantity} (Min: {threshVal})
                                 </span>
                               ) : null;
                             })}
@@ -529,6 +560,9 @@ export default function ProductsView({
                     </span>
                   )}
                 </div>
+              </div>
+
+              <div className="form-row">
                 <div className="form-group">
                   <label>Stock (Units Available)</label>
                   <input 
@@ -548,6 +582,28 @@ export default function ProductsView({
                   {formErrors.stock && (
                     <span style={{ color: "var(--danger)", fontSize: "0.8rem", marginTop: "2px" }}>
                       {formErrors.stock}
+                    </span>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label>Min Stock Threshold</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={productForm.threshold} 
+                    onChange={(e) => {
+                      setProductForm({ ...productForm, threshold: e.target.value });
+                      if (formErrors.threshold) setFormErrors({ ...formErrors, threshold: null });
+                    }} 
+                    placeholder="e.g. 10"
+                    style={{ 
+                      borderColor: formErrors.threshold ? "var(--danger)" : "var(--border-light)",
+                      boxShadow: formErrors.threshold ? "0 0 0 1px rgba(239, 68, 68, 0.25)" : "none"
+                    }}
+                  />
+                  {formErrors.threshold && (
+                    <span style={{ color: "var(--danger)", fontSize: "0.8rem", marginTop: "2px" }}>
+                      {formErrors.threshold}
                     </span>
                   )}
                 </div>
@@ -614,7 +670,18 @@ export default function ProductsView({
                   <label>Select Metro Branch</label>
                   <select 
                     value={stockForm.outletId} 
-                    onChange={(e) => setStockForm({ ...stockForm, outletId: e.target.value })}
+                    onChange={(e) => {
+                      const newOutletId = e.target.value;
+                      const existingStock = selectedProduct.stock && selectedProduct.stock.find(s => {
+                        const sId = s.outletId?._id || s.outletId;
+                        return sId === newOutletId;
+                      });
+                      setStockForm({
+                        outletId: newOutletId,
+                        quantity: existingStock ? existingStock.quantity.toString() : "",
+                        threshold: existingStock && existingStock.threshold !== undefined ? existingStock.threshold.toString() : "0"
+                      });
+                    }}
                     required
                   >
                     {outlets.map(outlet => (
@@ -633,6 +700,18 @@ export default function ProductsView({
                     value={stockForm.quantity} 
                     onChange={(e) => setStockForm({ ...stockForm, quantity: e.target.value })} 
                     placeholder="e.g. 50"
+                    required 
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Min Stock Threshold</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={stockForm.threshold} 
+                    onChange={(e) => setStockForm({ ...stockForm, threshold: e.target.value })} 
+                    placeholder="e.g. 10"
                     required 
                   />
                 </div>

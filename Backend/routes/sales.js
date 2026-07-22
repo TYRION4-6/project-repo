@@ -3,6 +3,7 @@ const router = express.Router();
 const Sale = require("../models/Sale");
 const Product = require("../models/Product");
 const Outlet = require("../models/Outlet");
+const Alert = require("../models/Alert");
 const { auth, managerOnly } = require("../middleware/auth");
 
 // Defence-in-depth: enforce JWT + manager role at the router level.
@@ -53,8 +54,19 @@ router.post("/", async (req, res) => {
     }
 
     // 4. Decrement stock
-    product.stock[stockItemIndex].quantity = currentStock - qty;
+    const newQty = currentStock - qty;
+    product.stock[stockItemIndex].quantity = newQty;
     await product.save();
+
+    // Check threshold and track alert
+    const threshold = product.stock[stockItemIndex].threshold || 0;
+    if (newQty < threshold) {
+      await Alert.findOneAndUpdate(
+        { productId, outletId },
+        { quantity: newQty, threshold },
+        { upsert: true, new: true }
+      );
+    }
 
     // 5. Create Sale record
     const totalPrice = product.price * qty;

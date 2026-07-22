@@ -19,6 +19,7 @@ export default function App() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [alerts, setAlerts] = useState([]);
   
   // Loading & Error States
   const [loading, setLoading] = useState(false);
@@ -44,17 +45,19 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
-      // Load outlets, products, and analytics
-      const [outletsData, productsData, analyticsData, salesData] = await Promise.all([
+      // Load outlets, products, analytics, sales, and alerts
+      const [outletsData, productsData, analyticsData, salesData, alertsData] = await Promise.all([
         api.outlets.getAll(),
         api.products.getAll(),
         api.sales.getAnalytics(),
-        api.sales.getAll()
+        api.sales.getAll(),
+        api.alerts.getAll()
       ]);
       setOutlets(outletsData);
       setProducts(productsData);
       setAnalytics(analyticsData);
       setSales(salesData);
+      setAlerts(alertsData);
     } catch (err) {
       console.error("Error loading MERN data", err);
       if (err.message.includes("Token") || err.message.includes("unauthorized")) {
@@ -100,6 +103,7 @@ export default function App() {
     setProducts([]);
     setSales([]);
     setAnalytics(null);
+    setAlerts([]);
     setAuthForm({ name: "", email: "", password: "" });
   };
 
@@ -154,9 +158,9 @@ export default function App() {
     }
   };
 
-  const handleUpdateStock = async (productId, outletId, quantity) => {
+  const handleUpdateStock = async (productId, outletId, quantity, threshold) => {
     try {
-      const response = await api.products.updateStock(productId, outletId, quantity);
+      const response = await api.products.updateStock(productId, outletId, quantity, threshold);
       await loadAllData();
       return response;
     } catch (err) {
@@ -191,6 +195,7 @@ export default function App() {
         return (
           <DashboardView 
             analyticsData={analytics} 
+            alerts={alerts}
             loading={loading} 
             onNavigateToSales={() => setCurrentView("sales")}
             onNavigateToProducts={() => setCurrentView("products")}

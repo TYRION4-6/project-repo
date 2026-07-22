@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   TrendingDown
 } from "lucide-react";
+import ThresholdAlerts from "./ThresholdAlerts";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -26,7 +27,7 @@ import {
 
 const COLORS = ["#6366f1", "#ec4899", "#10b981", "#f59e0b", "#06b6d4", "#8b5cf6", "#3b82f6", "#ef4444"];
 
-export default function DashboardView({ analyticsData, loading, onNavigateToSales, onNavigateToProducts }) {
+export default function DashboardView({ analyticsData, alerts = [], loading, onNavigateToSales, onNavigateToProducts }) {
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "300px" }}>
@@ -55,56 +56,8 @@ export default function DashboardView({ analyticsData, loading, onNavigateToSale
 
   return (
     <div className="fade-in">
-      {/* Low Stock Alerts */}
-      {lowStockAlerts.length > 0 && (
-        <div className="alert-box fade-in">
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-            <AlertTriangle color="var(--danger)" size={20} />
-            <h3 style={{ margin: 0, color: "#fff", fontSize: "1.1rem" }}>Low Stock Warnings ({lowStockAlerts.length} items)</h3>
-          </div>
-          <div style={{ maxHeight: "150px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
-            {lowStockAlerts.map((alert, index) => (
-              <div 
-                key={index} 
-                style={{ 
-                  display: "flex", 
-                  justifyContent: "space-between", 
-                  alignItems: "center", 
-                  background: "rgba(239, 68, 68, 0.08)", 
-                  padding: "8px 12px", 
-                  borderRadius: "var(--radius-sm)",
-                  fontSize: "0.88rem",
-                  border: "1px solid rgba(239, 68, 68, 0.1)"
-                }}
-              >
-                <div>
-                  <span style={{ fontWeight: 600, color: "#fff" }}>{alert.productName}</span>{" "}
-                  <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>({alert.sku})</span>{" "}
-                  at <span style={{ color: "var(--primary-light)", fontWeight: 500 }}>{alert.outletName} ({alert.city})</span>
-                </div>
-                <span className="badge badge-danger">
-                  Only {alert.quantity} Left
-                </span>
-              </div>
-            ))}
-          </div>
-          <button 
-            onClick={onNavigateToProducts}
-            style={{ 
-              marginTop: "12px", 
-              background: "none", 
-              border: "none", 
-              color: "var(--primary-light)", 
-              fontWeight: 600, 
-              cursor: "pointer", 
-              fontSize: "0.85rem",
-              textDecoration: "underline" 
-            }}
-          >
-            Refill Inventory
-          </button>
-        </div>
-      )}
+      {/* Dynamic Stock Threshold Alerts */}
+      <ThresholdAlerts alerts={alerts} onNavigateToProducts={onNavigateToProducts} />
 
       {/* Metrics Cards */}
       <div className="metrics-grid">

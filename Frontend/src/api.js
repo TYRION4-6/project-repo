@@ -127,11 +127,11 @@ export const api = {
       });
       return handleResponse(res);
     },
-    updateStock: async (productId, outletId, quantity) => {
+    updateStock: async (productId, outletId, quantity, threshold) => {
       const res = await fetch(`${API_URL}/products/${productId}/stock`, {
         method: "POST",
         headers: getHeaders(),
-        body: JSON.stringify({ outletId, quantity }),
+        body: JSON.stringify({ outletId, quantity, threshold }),
       });
       return handleResponse(res);
     },
@@ -163,6 +163,17 @@ export const api = {
     },
     getAnalytics: async () => {
       const res = await fetch(`${API_URL}/sales/analytics`, {
+        method: "GET",
+        headers: getHeaders(),
+      });
+      return handleResponse(res);
+    }
+  },
+
+  // Alert endpoints
+  alerts: {
+    getAll: async () => {
+      const res = await fetch(`${API_URL}/alerts`, {
         method: "GET",
         headers: getHeaders(),
       });

@@ -17,6 +17,7 @@ const outletsRouter = require("./routes/outlets");
 const productsRouter = require("./routes/products");
 const salesRouter = require("./routes/sales");
 const studentsRouter = require("./routes/students");
+const alertsRouter = require("./routes/alerts");
 
 dotenv.config();
 
@@ -46,6 +47,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/outlets", auth, managerOnly, outletsRouter);
 app.use("/api/products", auth, managerOnly, productsRouter);
 app.use("/api/sales", auth, managerOnly, salesRouter);
+app.use("/api/alerts", auth, managerOnly, alertsRouter);
 
 // General-purpose routes — JWT required, any role allowed
 app.use("/api/students", auth, studentsRouter);
