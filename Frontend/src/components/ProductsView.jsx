@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Edit2, Trash2, Package, Layers, X, Edit3, Settings } from "lucide-react";
+import { Plus, Edit2, Trash2, Package, Layers, X, Edit3, Settings, AlertCircle } from "lucide-react";
 
 export default function ProductsView({ 
   products, 
@@ -15,13 +15,20 @@ export default function ProductsView({
   const [editingProduct, setEditingProduct] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
 
+  // Form error and loading states
+  const [formErrors, setFormErrors] = useState({});
+  const [submitError, setSubmitError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
   // Product form data
   const [productForm, setProductForm] = useState({
     name: "",
     sku: "",
     category: "",
     price: "",
-    description: ""
+    description: "",
+    outletId: "",
+    stock: "0"
   });
 
   // Stock update form data
@@ -37,21 +44,110 @@ export default function ProductsView({
       sku: "",
       category: "",
       price: "",
-      description: ""
+      description: "",
+      outletId: outlets.length > 0 ? outlets[0]._id : "",
+      stock: "0"
     });
+    setFormErrors({});
+    setSubmitError("");
     setProductModalOpen(true);
   };
 
   const handleOpenEditProduct = (product) => {
     setEditingProduct(product);
+    
+    // Find default outlet (prefer one already stocked, or first available)
+    const defaultOutletId = product.stock && product.stock.length > 0 
+      ? (product.stock[0].outletId?._id || product.stock[0].outletId || (outlets.length > 0 ? outlets[0]._id : ""))
+      : (outlets.length > 0 ? outlets[0]._id : "");
+      
+    // Find stock for this default outlet
+    const defaultStockItem = product.stock && product.stock.length > 0
+      ? product.stock.find(s => {
+          const sId = s.outletId?._id || s.outletId;
+          return sId === defaultOutletId;
+        })
+      : null;
+    const defaultStockQty = defaultStockItem ? defaultStockItem.quantity : 0;
+
     setProductForm({
       name: product.name,
       sku: product.sku,
       category: product.category,
       price: product.price,
-      description: product.description || ""
+      description: product.description || "",
+      outletId: defaultOutletId,
+      stock: defaultStockQty.toString()
     });
+    setFormErrors({});
+    setSubmitError("");
     setProductModalOpen(true);
+  };
+
+  const handleOutletChange = (newOutletId) => {
+    let stockQty = "0";
+    if (editingProduct) {
+      const stockItem = editingProduct.stock && editingProduct.stock.find(s => {
+        const sId = s.outletId?._id || s.outletId;
+        return sId === newOutletId;
+      });
+      stockQty = stockItem ? stockItem.quantity.toString() : "0";
+    }
+    setProductForm(prev => ({
+      ...prev,
+      outletId: newOutletId,
+      stock: stockQty
+    }));
+  };
+
+  const validateForm = () => {
+    const errors = {};
+    
+    // Name validation
+    if (!productForm.name.trim()) {
+      errors.name = "Product name is required";
+    } else if (productForm.name.trim().length < 2) {
+      errors.name = "Product name must be at least 2 characters";
+    }
+    
+    // SKU validation
+    const skuRegex = /^[a-zA-Z0-9-_]+$/;
+    if (!productForm.sku.trim()) {
+      errors.sku = "SKU is required";
+    } else if (!skuRegex.test(productForm.sku.trim())) {
+      errors.sku = "SKU must contain only letters, numbers, hyphens, and underscores";
+    }
+    
+    // Category validation
+    if (!productForm.category.trim()) {
+      errors.category = "Category is required";
+    }
+    
+    // Price validation
+    const priceNum = parseFloat(productForm.price);
+    if (productForm.price === "" || isNaN(priceNum)) {
+      errors.price = "Price is required";
+    } else if (priceNum < 0) {
+      errors.price = "Price must be a positive number";
+    }
+    
+    // Outlet validation
+    if (outlets.length > 0 && !productForm.outletId) {
+      errors.outletId = "Please select an outlet";
+    } else if (outlets.length === 0) {
+      errors.outletId = "At least one outlet must exist in the system";
+    }
+    
+    // Stock validation
+    const stockNum = parseInt(productForm.stock, 10);
+    if (productForm.stock === "" || isNaN(stockNum)) {
+      errors.stock = "Stock quantity is required";
+    } else if (stockNum < 0 || !Number.isInteger(stockNum)) {
+      errors.stock = "Stock must be a non-negative integer";
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleOpenAdjustStock = (product) => {
@@ -63,14 +159,55 @@ export default function ProductsView({
     setStockModalOpen(true);
   };
 
-  const handleProductSubmit = (e) => {
+  const handleProductSubmit = async (e) => {
     e.preventDefault();
-    if (editingProduct) {
-      onUpdateProduct(editingProduct._id, productForm);
-    } else {
-      onCreateProduct(productForm);
+    setSubmitError("");
+    
+    if (!validateForm()) {
+      return;
     }
-    setProductModalOpen(false);
+    
+    setSubmitting(true);
+    
+    try {
+      const priceNum = parseFloat(productForm.price);
+      const stockNum = parseInt(productForm.stock, 10);
+      
+      if (editingProduct) {
+        // Update product info
+        const updatedProductData = {
+          name: productForm.name.trim(),
+          sku: productForm.sku.trim(),
+          category: productForm.category.trim(),
+          price: priceNum,
+          description: productForm.description.trim(),
+        };
+        
+        await onUpdateProduct(editingProduct._id, updatedProductData);
+        
+        // Update stock level for the selected outlet
+        if (productForm.outletId) {
+          await onUpdateStock(editingProduct._id, productForm.outletId, stockNum);
+        }
+      } else {
+        // Create product with stock
+        const newProductData = {
+          name: productForm.name.trim(),
+          sku: productForm.sku.trim(),
+          category: productForm.category.trim(),
+          price: priceNum,
+          description: productForm.description.trim(),
+          stock: productForm.outletId ? [{ outletId: productForm.outletId, quantity: stockNum }] : []
+        };
+        
+        await onCreateProduct(newProductData);
+      }
+      setProductModalOpen(false);
+    } catch (err) {
+      setSubmitError(err.message || "Failed to save product. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleStockSubmit = (e) => {
@@ -241,33 +378,74 @@ export default function ProductsView({
               <button 
                 onClick={() => setProductModalOpen(false)} 
                 style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}
+                disabled={submitting}
               >
                 <X size={20} />
               </button>
             </div>
 
             <form onSubmit={handleProductSubmit}>
+              {submitError && (
+                <div style={{ 
+                  display: "flex", 
+                  alignItems: "center", 
+                  gap: "8px", 
+                  color: "var(--danger)", 
+                  background: "rgba(239, 68, 68, 0.08)", 
+                  padding: "10px 14px", 
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "0.85rem",
+                  marginBottom: "20px",
+                  border: "1px solid rgba(239, 68, 68, 0.15)"
+                }}>
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                  <span>{submitError}</span>
+                </div>
+              )}
+
               <div className="form-row">
                 <div className="form-group">
                   <label>Product Name</label>
                   <input 
                     type="text" 
                     value={productForm.name} 
-                    onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} 
+                    onChange={(e) => {
+                      setProductForm({ ...productForm, name: e.target.value });
+                      if (formErrors.name) setFormErrors({ ...formErrors, name: null });
+                    }} 
                     placeholder="e.g. Leather Wallet"
-                    required 
+                    style={{ 
+                      borderColor: formErrors.name ? "var(--danger)" : "var(--border-light)",
+                      boxShadow: formErrors.name ? "0 0 0 1px rgba(239, 68, 68, 0.25)" : "none"
+                    }}
                   />
+                  {formErrors.name && (
+                    <span style={{ color: "var(--danger)", fontSize: "0.8rem", marginTop: "2px" }}>
+                      {formErrors.name}
+                    </span>
+                  )}
                 </div>
                 <div className="form-group">
                   <label>SKU (Stock Keeping Unit)</label>
                   <input 
                     type="text" 
                     value={productForm.sku} 
-                    onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })} 
+                    onChange={(e) => {
+                      setProductForm({ ...productForm, sku: e.target.value });
+                      if (formErrors.sku) setFormErrors({ ...formErrors, sku: null });
+                    }} 
                     placeholder="e.g. LTHR-WLT-01"
                     disabled={!!editingProduct}
-                    required 
+                    style={{ 
+                      borderColor: formErrors.sku ? "var(--danger)" : "var(--border-light)",
+                      boxShadow: formErrors.sku ? "0 0 0 1px rgba(239, 68, 68, 0.25)" : "none"
+                    }}
                   />
+                  {formErrors.sku && (
+                    <span style={{ color: "var(--danger)", fontSize: "0.8rem", marginTop: "2px" }}>
+                      {formErrors.sku}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -277,21 +455,101 @@ export default function ProductsView({
                   <input 
                     type="text" 
                     value={productForm.category} 
-                    onChange={(e) => setProductForm({ ...productForm, category: e.target.value })} 
+                    onChange={(e) => {
+                      setProductForm({ ...productForm, category: e.target.value });
+                      if (formErrors.category) setFormErrors({ ...formErrors, category: null });
+                    }} 
                     placeholder="e.g. Accessories"
-                    required 
+                    style={{ 
+                      borderColor: formErrors.category ? "var(--danger)" : "var(--border-light)",
+                      boxShadow: formErrors.category ? "0 0 0 1px rgba(239, 68, 68, 0.25)" : "none"
+                    }}
                   />
+                  {formErrors.category && (
+                    <span style={{ color: "var(--danger)", fontSize: "0.8rem", marginTop: "2px" }}>
+                      {formErrors.category}
+                    </span>
+                  )}
                 </div>
                 <div className="form-group">
                   <label>Selling Price (INR)</label>
                   <input 
                     type="number" 
                     min="0"
+                    step="0.01"
                     value={productForm.price} 
-                    onChange={(e) => setProductForm({ ...productForm, price: e.target.value })} 
+                    onChange={(e) => {
+                      setProductForm({ ...productForm, price: e.target.value });
+                      if (formErrors.price) setFormErrors({ ...formErrors, price: null });
+                    }} 
                     placeholder="e.g. 1499"
-                    required 
+                    style={{ 
+                      borderColor: formErrors.price ? "var(--danger)" : "var(--border-light)",
+                      boxShadow: formErrors.price ? "0 0 0 1px rgba(239, 68, 68, 0.25)" : "none"
+                    }}
                   />
+                  {formErrors.price && (
+                    <span style={{ color: "var(--danger)", fontSize: "0.8rem", marginTop: "2px" }}>
+                      {formErrors.price}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Metro Outlet</label>
+                  <select 
+                    value={productForm.outletId} 
+                    onChange={(e) => {
+                      handleOutletChange(e.target.value);
+                      if (formErrors.outletId) setFormErrors({ ...formErrors, outletId: null });
+                    }}
+                    style={{ 
+                      borderColor: formErrors.outletId ? "var(--danger)" : "var(--border-light)",
+                      boxShadow: formErrors.outletId ? "0 0 0 1px rgba(239, 68, 68, 0.25)" : "none"
+                    }}
+                  >
+                    {outlets.length === 0 ? (
+                      <option value="">No outlets available. Add one first.</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Outlet --</option>
+                        {outlets.map(outlet => (
+                          <option key={outlet._id} value={outlet._id}>
+                            {outlet.name} ({outlet.city})
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                  {formErrors.outletId && (
+                    <span style={{ color: "var(--danger)", fontSize: "0.8rem", marginTop: "2px" }}>
+                      {formErrors.outletId}
+                    </span>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label>Stock (Units Available)</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={productForm.stock} 
+                    onChange={(e) => {
+                      setProductForm({ ...productForm, stock: e.target.value });
+                      if (formErrors.stock) setFormErrors({ ...formErrors, stock: null });
+                    }} 
+                    placeholder="e.g. 50"
+                    style={{ 
+                      borderColor: formErrors.stock ? "var(--danger)" : "var(--border-light)",
+                      boxShadow: formErrors.stock ? "0 0 0 1px rgba(239, 68, 68, 0.25)" : "none"
+                    }}
+                  />
+                  {formErrors.stock && (
+                    <span style={{ color: "var(--danger)", fontSize: "0.8rem", marginTop: "2px" }}>
+                      {formErrors.stock}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -306,11 +564,20 @@ export default function ProductsView({
               </div>
 
               <div className="flex-end" style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px" }}>
-                <button type="button" onClick={() => setProductModalOpen(false)} className="btn btn-secondary">
+                <button 
+                  type="button" 
+                  onClick={() => setProductModalOpen(false)} 
+                  className="btn btn-secondary"
+                  disabled={submitting}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingProduct ? "Save Changes" : "Create Product"}
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={submitting}
+                >
+                  {submitting ? "Saving..." : editingProduct ? "Save Changes" : "Create Product"}
                 </button>
               </div>
             </form>

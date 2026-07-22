@@ -134,28 +134,34 @@ export default function App() {
   // Product Actions
   const handleCreateProduct = async (productData) => {
     try {
-      await api.products.create(productData);
-      loadAllData();
+      const response = await api.products.create(productData);
+      await loadAllData();
+      return response;
     } catch (err) {
       setError(err.message || "Failed to create product");
+      throw err;
     }
   };
 
   const handleUpdateProduct = async (id, productData) => {
     try {
-      await api.products.update(id, productData);
-      loadAllData();
+      const response = await api.products.update(id, productData);
+      await loadAllData();
+      return response;
     } catch (err) {
       setError(err.message || "Failed to update product");
+      throw err;
     }
   };
 
   const handleUpdateStock = async (productId, outletId, quantity) => {
     try {
-      await api.products.updateStock(productId, outletId, quantity);
-      loadAllData();
+      const response = await api.products.updateStock(productId, outletId, quantity);
+      await loadAllData();
+      return response;
     } catch (err) {
       setError(err.message || "Failed to adjust stock levels");
+      throw err;
     }
   };
 
