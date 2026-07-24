@@ -1,11 +1,14 @@
 const API_BASE_URL = "http://localhost:5050/api";
 
 const getHeaders = () => {
-  const token = localStorage.getItem("metro_token") || "demo_token_metro_2026";
-  return {
+  const token = localStorage.getItem("metro_token");
+  const headers = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
   };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
 };
 
 export const api = {

@@ -3,11 +3,10 @@ import {
   TrendingUp,
   DollarSign,
   ShoppingBag,
-  Building2,
   AlertTriangle,
   Layers,
   BarChart2,
-  Package,
+  LogOut,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -28,7 +27,7 @@ import { api } from "../api";
 
 const CATEGORY_COLORS = ["#6366f1", "#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
 
-export default function AnalyticsDashboard({ outlets, selectedOutlet, setSelectedOutlet }) {
+export default function AnalyticsDashboard({ outlets, selectedOutlet, setSelectedOutlet, user, onLogout }) {
   const [products, setProducts] = useState([]);
   const [selectedProductId, setSelectedProductId] = useState("ALL");
   const [data, setData] = useState(null);
@@ -121,6 +120,23 @@ export default function AnalyticsDashboard({ outlets, selectedOutlet, setSelecte
               ))}
             </select>
           </div>
+
+          {onLogout && (
+            <div>
+              <label style={{ fontSize: "0.8rem", color: "transparent", display: "block", marginBottom: "0.2rem" }}>
+                Actions
+              </label>
+              <button
+                className="btn btn-danger btn-sm logout-btn"
+                onClick={onLogout}
+                title="Logout"
+                style={{ height: "38px" }}
+              >
+                <LogOut size={15} />
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

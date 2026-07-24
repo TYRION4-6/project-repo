@@ -1,5 +1,5 @@
 import React from "react";
-import { Building2, Bell, RefreshCw, UserCheck, ShieldAlert, LogOut } from "lucide-react";
+import { Building2, Bell, RefreshCw, UserCheck, LogOut } from "lucide-react";
 
 export default function Navbar({
   user,
@@ -48,17 +48,38 @@ export default function Navbar({
         </button>
 
         {user ? (
-          <div className="user-profile-btn" onClick={onLogout} title="Click to Logout">
-            <UserCheck size={18} className="text-emerald" />
-            <div style={{ textTransform: "capitalize", fontSize: "0.85rem", fontWeight: 600 }}>
-              {user.name}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <div className="user-profile-badge" style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.75rem", background: "var(--bg-surface)", border: "1px solid var(--border-color)", borderRadius: "var(--radius-md)" }}>
+              <UserCheck size={18} className="text-emerald" />
+              <div style={{ textTransform: "capitalize", fontSize: "0.85rem", fontWeight: 600 }}>
+                {user.name}
+              </div>
             </div>
-            <LogOut size={14} style={{ opacity: 0.6 }} />
+            <button
+              className="btn btn-danger btn-sm logout-btn"
+              onClick={onLogout}
+              title="Logout"
+              id="logout-btn"
+            >
+              <LogOut size={14} />
+              <span>Logout</span>
+            </button>
           </div>
         ) : (
-          <button className="btn btn-primary btn-sm" onClick={onOpenAuth}>
-            Manager Login
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <button className="btn btn-primary btn-sm" onClick={onOpenAuth}>
+              Manager Login
+            </button>
+            <button
+              className="btn btn-danger btn-sm logout-btn"
+              onClick={onLogout}
+              title="Logout"
+              id="logout-btn"
+            >
+              <LogOut size={14} />
+              <span>Logout</span>
+            </button>
+          </div>
         )}
       </div>
     </header>

@@ -72,8 +72,19 @@ function App() {
   };
 
   const handleLogout = () => {
+    // 1. Remove JWT token & authentication data from client storage
     localStorage.removeItem("metro_token");
+    localStorage.removeItem("token");
+    localStorage.removeItem("jwt");
+    sessionStorage.removeItem("metro_token");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("jwt");
+
+    // 2. Clear user state
     setUser(null);
+
+    // 3. Navigate/redirect user to login screen modal
+    setIsAuthModalOpen(true);
   };
 
   return (
@@ -142,6 +153,8 @@ function App() {
             outlets={outlets}
             selectedOutlet={selectedOutlet}
             setSelectedOutlet={setSelectedOutlet}
+            user={user}
+            onLogout={handleLogout}
           />
         )}
 
