@@ -233,36 +233,74 @@ router.get("/analytics", authMiddleware, async (req, res) => {
 
     const dailyTrend = Array.from(dailyTrendMap.values());
 
-    // 2. Outlet Performance Comparison
+    // Product map for cost and pricing
+    const prodMap = new Map();
+    products.forEach((p) => prodMap.set(String(p._id), p));
+
+    // 2. Outlet Performance Comparison & Inventory Turnover
     const outletPerfMap = new Map();
     outlets.forEach((out) => {
       outletPerfMap.set(String(out._id), {
         id: out._id,
+        code: out.code,
         name: out.name.replace("Metro Retail - ", ""),
+        fullName: out.name,
         city: out.city,
+        locality: out.locality,
         revenue: 0,
+        cogs: 0,
         orders: 0,
+        unitsSold: 0,
         totalStock: 0,
+        inventoryValueCost: 0,
+        inventoryValueRetail: 0,
       });
     });
 
-    // Add stock info
+    // Add stock info & inventory valuation
     inventories.forEach((inv) => {
-      if (outletPerfMap.has(String(inv.outletId))) {
-        outletPerfMap.get(String(inv.outletId)).totalStock += inv.stockQuantity || 0;
+      const outData = outletPerfMap.get(String(inv.outletId));
+      if (outData) {
+        const qty = inv.stockQuantity || 0;
+        outData.totalStock += qty;
+        const prod = prodMap.get(String(inv.productId));
+        if (prod) {
+          outData.inventoryValueCost += qty * (prod.costPrice || 0);
+          outData.inventoryValueRetail += qty * (prod.price || 0);
+        }
       }
     });
 
-    // Add sales info
+    // Add sales, COGS & units sold info
     sales.forEach((s) => {
-      if (outletPerfMap.has(String(s.outletId))) {
-        const outData = outletPerfMap.get(String(s.outletId));
+      const outData = outletPerfMap.get(String(s.outletId));
+      if (outData) {
         outData.revenue += s.totalAmount || 0;
         outData.orders += 1;
+        s.items.forEach((it) => {
+          const q = it.quantity || 0;
+          outData.unitsSold += q;
+          const prod = prodMap.get(String(it.productId));
+          const costPrice = prod ? prod.costPrice : (it.unitPrice * 0.6);
+          outData.cogs += q * costPrice;
+        });
       }
     });
 
-    const outletPerformance = Array.from(outletPerfMap.values());
+    const outletPerformance = Array.from(outletPerfMap.values()).map((out) => {
+      const grossProfit = out.revenue - out.cogs;
+      const turnoverRatioCOGS = out.inventoryValueCost > 0 ? Number((out.cogs / out.inventoryValueCost).toFixed(2)) : 0;
+      const turnoverRatioSales = out.inventoryValueRetail > 0 ? Number((out.revenue / out.inventoryValueRetail).toFixed(2)) : 0;
+      const unitTurnover = out.totalStock > 0 ? Number((out.unitsSold / out.totalStock).toFixed(2)) : 0;
+
+      return {
+        ...out,
+        grossProfit,
+        turnoverRatioCOGS,
+        turnoverRatioSales,
+        unitTurnover,
+      };
+    });
 
     // 3. Top Selling Products
     const prodSalesMap = new Map();
