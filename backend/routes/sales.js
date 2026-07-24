@@ -10,10 +10,42 @@ const { authMiddleware } = require("../middleware/auth");
 // Record a new sale & auto-deduct stock in real time
 router.post("/", authMiddleware, async (req, res) => {
   try {
-    const { outletId, items, paymentMethod, customerPhone } = req.body;
+    let { outletId, items, productId, quantity, date, saleDate, entryDate, notes, paymentMethod, customerPhone } = req.body;
 
-    if (!outletId || !items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: "outletId and items array are required" });
+    if (!outletId) {
+      return res.status(400).json({ error: "Outlet ID is required" });
+    }
+
+    // Support single item direct POST payloads: { outletId, productId, quantity, date }
+    if (!items && productId) {
+      const qtyNum = Number(quantity);
+      if (isNaN(qtyNum) || qtyNum <= 0) {
+        return res.status(400).json({ error: "Quantity must be a positive number greater than 0" });
+      }
+      items = [{ productId, quantity: qtyNum }];
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "Product item(s) are required" });
+    }
+
+    // Validate positive quantity for all items
+    for (const item of items) {
+      const q = Number(item.quantity);
+      if (isNaN(q) || q <= 0) {
+        return res.status(400).json({ error: "Quantity must be a positive number greater than 0" });
+      }
+    }
+
+    // Parse date
+    const rawDate = date || saleDate || entryDate;
+    let transactionDate = new Date();
+    if (rawDate) {
+      const parsedDate = new Date(rawDate);
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ error: "Invalid date format provided" });
+      }
+      transactionDate = parsedDate;
     }
 
     let outletName = "Metro Outlet";
@@ -39,17 +71,17 @@ router.post("/", authMiddleware, async (req, res) => {
 
     for (const item of items) {
       const prod = productsMap.get(String(item.productId));
-      const productName = item.productName || (prod ? prod.name : "Product");
+      const productName = item.productName || (prod ? prod.name : "Product Item");
       const unitPrice = Number(item.unitPrice || (prod ? prod.price : 0));
-      const quantity = Number(item.quantity || 1);
-      const subtotal = unitPrice * quantity;
+      const q = Number(item.quantity);
+      const subtotal = unitPrice * q;
 
       totalAmount += subtotal;
 
       formattedItems.push({
         productId: item.productId,
         productName,
-        quantity,
+        quantity: q,
         unitPrice,
         subtotal,
       });
@@ -58,7 +90,7 @@ router.post("/", authMiddleware, async (req, res) => {
       if (isDbReady()) {
         const inv = await Inventory.findOne({ outletId, productId: item.productId });
         if (inv) {
-          inv.stockQuantity = Math.max(0, inv.stockQuantity - quantity);
+          inv.stockQuantity = Math.max(0, inv.stockQuantity - q);
           await inv.save();
         }
       } else {
@@ -66,7 +98,7 @@ router.post("/", authMiddleware, async (req, res) => {
           (i) => String(i.outletId) === String(outletId) && String(i.productId) === String(item.productId)
         );
         if (inv) {
-          inv.stockQuantity = Math.max(0, inv.stockQuantity - quantity);
+          inv.stockQuantity = Math.max(0, inv.stockQuantity - q);
         }
       }
     }
@@ -82,11 +114,12 @@ router.post("/", authMiddleware, async (req, res) => {
         totalAmount,
         paymentMethod: paymentMethod || "UPI",
         customerPhone: customerPhone || "",
-        saleDate: new Date(),
-        managerId: req.user.id,
+        saleDate: transactionDate,
+        notes: notes || "",
+        managerId: req.user ? req.user.id : "mgr_1",
       });
       await newSale.save();
-      return res.status(201).json({ message: "Sale recorded & inventory synced in real-time", sale: newSale });
+      return res.status(201).json({ message: "Sale transaction saved successfully", sale: newSale });
     } else {
       const newSale = {
         _id: generateId(),
@@ -97,11 +130,12 @@ router.post("/", authMiddleware, async (req, res) => {
         totalAmount,
         paymentMethod: paymentMethod || "UPI",
         customerPhone: customerPhone || "",
-        saleDate: new Date(),
-        managerId: req.user.id,
+        saleDate: transactionDate,
+        notes: notes || "",
+        managerId: req.user ? req.user.id : "mgr_1",
       };
       inMemoryStore.sales.unshift(newSale);
-      return res.status(201).json({ message: "Sale recorded & inventory synced in real-time", sale: newSale });
+      return res.status(201).json({ message: "Sale transaction saved successfully", sale: newSale });
     }
   } catch (error) {
     res.status(500).json({ error: error.message });

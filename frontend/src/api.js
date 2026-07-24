@@ -136,6 +136,15 @@ export const api = {
     return res.json();
   },
 
+  recordSingleSale: async ({ outletId, productId, quantity, date, notes }) => {
+    const res = await fetch(`${API_BASE_URL}/sales`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ outletId, productId, quantity, date, notes }),
+    });
+    return res.json();
+  },
+
   getSales: async (outletId = "") => {
     const url = outletId ? `${API_BASE_URL}/sales?outletId=${outletId}` : `${API_BASE_URL}/sales`;
     const res = await fetch(url, { headers: getHeaders() });

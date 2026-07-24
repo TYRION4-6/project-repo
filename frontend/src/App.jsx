@@ -5,6 +5,7 @@ import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import OutletsManager from "./components/OutletsManager";
 import ProductsManager from "./components/ProductsManager";
 import POSTerminal from "./components/POSTerminal";
+import OutletProductEntryForm from "./components/OutletProductEntryForm";
 import SalesHistory from "./components/SalesHistory";
 import InventoryAlerts from "./components/InventoryAlerts";
 import {
@@ -14,13 +15,14 @@ import {
   ShoppingCart,
   Receipt,
   Bell,
+  FilePlus,
 } from "lucide-react";
 import { api } from "./api";
 import "./App.css";
 
 function App() {
   const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState("analytics");
+  const [activeTab, setActiveTab] = useState("entry-form");
   const [outlets, setOutlets] = useState([]);
   const [products, setProducts] = useState([]);
   const [alertsCount, setAlertsCount] = useState(0);
@@ -103,6 +105,13 @@ function App() {
       {/* Main Navigation Subheader Tabs */}
       <div className="tabs-bar">
         <button
+          className={`tab-btn ${activeTab === "entry-form" ? "active" : ""}`}
+          onClick={() => setActiveTab("entry-form")}
+        >
+          <FilePlus size={16} /> Outlet & Product Entry Form
+        </button>
+
+        <button
           className={`tab-btn ${activeTab === "analytics" ? "active" : ""}`}
           onClick={() => setActiveTab("analytics")}
         >
@@ -148,6 +157,25 @@ function App() {
 
       {/* Main View Area */}
       <main className="main-content">
+        {activeTab === "entry-form" && (
+          <OutletProductEntryForm
+            outlets={outlets}
+            products={products}
+            onSubmit={async (formData) => {
+              console.log("Form Submitted:", formData);
+              // Option to sync with backend inventory restock if needed
+              if (formData.outletId && formData.productId) {
+                try {
+                  await api.restockInventory(formData.outletId, formData.productId, formData.quantity);
+                  loadInitialData();
+                } catch (e) {
+                  // Fallback for standalone demo
+                }
+              }
+            }}
+          />
+        )}
+
         {activeTab === "analytics" && (
           <AnalyticsDashboard
             outlets={outlets}
