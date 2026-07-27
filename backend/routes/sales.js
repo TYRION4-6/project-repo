@@ -1,0 +1,496 @@
+const express = require("express");
+const router = express.Router();
+const mongoose = require("mongoose");
+const Sale = require("../models/Sale");
+const Product = require("../models/Product");
+const Outlet = require("../models/Outlet");
+const auth = require("../middleware/auth");
+
+// @route   POST api/sales
+// @desc    Record a new sales transaction and update inventory levels
+// @access  Private
+router.post("/", auth, async (req, res) => {
+    const { outlet, items } = req.body;
+
+    if (!outlet || !items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "Outlet and items are required" });
+    }
+
+    try {
+        // Verify outlet ownership
+        const outletDoc = await Outlet.findById(outlet);
+        if (!outletDoc) {
+            return res.status(404).json({ message: "Outlet not found" });
+        }
+        if (outletDoc.manager.toString() !== req.user.id) {
+            return res.status(401).json({ message: "Not authorized to record sales for this outlet" });
+        }
+
+        let totalAmount = 0;
+        const saleItems = [];
+        const productsToUpdate = [];
+
+        // Validate products and check stock
+        for (const item of items) {
+            const product = await Product.findById(item.product);
+            if (!product) {
+                return res.status(404).json({ message: `Product not found: ${item.product}` });
+            }
+
+            // Ensure product belongs to the selected outlet
+            if (product.outlet.toString() !== outlet) {
+                return res.status(400).json({ 
+                    message: `Product ${product.name} does not belong to the selected outlet` 
+                });
+            }
+
+            // Check stock level
+            if (product.stockLevel < item.quantity) {
+                return res.status(400).json({ 
+                    message: `Insufficient stock for product ${product.name}. Available: ${product.stockLevel}, Requested: ${item.quantity}` 
+                });
+            }
+
+            const itemTotal = product.price * item.quantity;
+            totalAmount += itemTotal;
+
+            saleItems.push({
+                product: product._id,
+                quantity: item.quantity,
+                priceAtSale: product.price
+            });
+
+            productsToUpdate.push({
+                productDoc: product,
+                newStock: product.stockLevel - item.quantity
+            });
+        }
+
+        // Deduct inventory stock
+        for (const update of productsToUpdate) {
+            update.productDoc.stockLevel = update.newStock;
+            await update.productDoc.save();
+        }
+
+        // Create and save sale
+        const newSale = new Sale({
+            outlet,
+            items: saleItems,
+            totalAmount,
+            recordedBy: req.user.id
+        });
+
+                const sale = await newSale.save();
+        
+        // Populate and return
+        const populatedSale = await Sale.findById(sale._id)
+            .populate("outlet", "name city")
+            .populate("items.product", "name sku category");
+
+        // Emit real-time events
+        const dashboardEmitter = require("../utils/eventEmitter");
+        dashboardEmitter.emit("new-sale", populatedSale);
+        dashboardEmitter.emit("alert-change", { managerId: req.user.id });
+
+        res.status(201).json(populatedSale);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server error");
+    }
+});
+
+// @route   GET api/sales
+// @desc    Get all sales recorded by the manager
+// @access  Private
+router.get("/", auth, async (req, res) => {
+    try {
+        const outlets = await Outlet.find({ manager: req.user.id });
+        const outletIds = outlets.map(o => o._id);
+
+        const sales = await Sale.find({ outlet: { $in: outletIds } })
+            .populate("outlet", "name city")
+            .populate("items.product", "name sku category")
+            .sort({ date: -1 });
+
+        res.json(sales);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server error");
+    }
+});
+
+// @route   GET api/sales/analytics
+// @desc    Get aggregate sales analytics for manager dashboard
+// @access  Private
+router.get("/analytics", auth, async (req, res) => {
+    try {
+        const managerId = new mongoose.Types.ObjectId(req.user.id);
+
+        // Fetch outlets owned by manager
+        const outlets = await Outlet.find({ manager: managerId });
+        const outletIds = outlets.map(o => o._id);
+
+        if (outletIds.length === 0) {
+            return res.json({
+                totalRevenue: 0,
+                totalSalesCount: 0,
+                lowStockCount: 0,
+                activeOutletsCount: 0,
+                salesByDate: [],
+                salesByOutlet: [],
+                salesByCategory: [],
+                topProducts: []
+            });
+        }
+
+        // 1. Overall low stock count
+        const lowStockCount = await Product.countDocuments({
+            outlet: { $in: outletIds },
+            $expr: { $lte: ["$stockLevel", "$lowStockAlertThreshold"] }
+        });
+
+        // 2. Total active outlets count
+        const activeOutletsCount = outletIds.length;
+
+        // 3. Overall Revenue and Total Sales Count
+        const overallStats = await Sale.aggregate([
+            { $match: { outlet: { $in: outletIds } } },
+            { 
+                $group: { 
+                    _id: null, 
+                    totalRevenue: { $sum: "$totalAmount" },
+                    totalSalesCount: { $sum: 1 }
+                } 
+            }
+        ]);
+
+        const totalRevenue = overallStats[0]?.totalRevenue || 0;
+        const totalSalesCount = overallStats[0]?.totalSalesCount || 0;
+
+        // 4. Sales Over Time (grouped by day, last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const salesByDate = await Sale.aggregate([
+            { 
+                $match: { 
+                    outlet: { $in: outletIds },
+                    date: { $gte: thirtyDaysAgo }
+                } 
+            },
+            {
+                $group: {
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+                    revenue: { $sum: "$totalAmount" },
+                    transactions: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } },
+            {
+                $project: {
+                    date: "$_id",
+                    revenue: 1,
+                    transactions: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+        // 5. Sales by Outlet Branch
+        const salesByOutlet = await Sale.aggregate([
+            { $match: { outlet: { $in: outletIds } } },
+            {
+                $group: {
+                    _id: "$outlet",
+                    revenue: { $sum: "$totalAmount" },
+                    salesCount: { $sum: 1 }
+                }
+            },
+            {
+                $lookup: {
+                    from: "outlets",
+                    localField: "_id",
+                    foreignField: "_id",
+                    as: "outletInfo"
+                }
+            },
+            { $unwind: "$outletInfo" },
+            {
+                $project: {
+                    outletId: "$_id",
+                    name: "$outletInfo.name",
+                    city: "$outletInfo.city",
+                    revenue: 1,
+                    salesCount: 1,
+                    _id: 0
+                }
+            },
+            { $sort: { revenue: -1 } }
+        ]);
+
+        // 6. Sales by Category & Top Products
+        // To get product details like category, we need to unwind items and lookup products
+        const itemSales = await Sale.aggregate([
+            { $match: { outlet: { $in: outletIds } } },
+            { $unwind: "$items" },
+            {
+                $lookup: {
+                    from: "products",
+                    localField: "items.product",
+                    foreignField: "_id",
+                    as: "productInfo"
+                }
+            },
+            { $unwind: "$productInfo" },
+            {
+                $project: {
+                    category: "$productInfo.category",
+                    productName: "$productInfo.name",
+                    quantity: "$items.quantity",
+                    revenue: { $multiply: ["$items.quantity", "$items.priceAtSale"] }
+                }
+            }
+        ]);
+
+        // Aggregate by Category
+        const categoryMap = {};
+        const productMap = {};
+
+        itemSales.forEach(sale => {
+            // Category distribution
+            if (!categoryMap[sale.category]) {
+                categoryMap[sale.category] = { category: sale.category, revenue: 0, quantity: 0 };
+            }
+            categoryMap[sale.category].revenue += sale.revenue;
+            categoryMap[sale.category].quantity += sale.quantity;
+
+            // Product statistics
+            if (!productMap[sale.productName]) {
+                productMap[sale.productName] = { name: sale.productName, category: sale.category, revenue: 0, unitsSold: 0 };
+            }
+            productMap[sale.productName].revenue += sale.revenue;
+            productMap[sale.productName].unitsSold += sale.quantity;
+        });
+
+        const salesByCategory = Object.values(categoryMap).sort((a, b) => b.revenue - a.revenue);
+        const topProducts = Object.values(productMap)
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, 5); // top 5 products
+
+        res.json({
+            totalRevenue,
+            totalSalesCount,
+            lowStockCount,
+            activeOutletsCount,
+            salesByDate,
+            salesByOutlet,
+            salesByCategory,
+            topProducts
+        });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server error");
+    }
+});
+
+// @route   GET api/sales/trends
+// @desc    Get sales trends (revenue/transactions) per outlet over time
+// @access  Private
+router.get("/trends", auth, async (req, res) => {
+    try {
+        const managerId = new mongoose.Types.ObjectId(req.user.id);
+        
+        // Fetch all outlets belonging to this manager to verify ownership
+        const managerOutlets = await Outlet.find({ manager: managerId });
+        const managerOutletIds = managerOutlets.map(o => o._id.toString());
+        
+        if (managerOutletIds.length === 0) {
+            return res.json([]);
+        }
+
+        // Parse and filter selected outlets
+        let selectedOutletIds = [];
+        if (req.query.outlets) {
+            const outletsQuery = req.query.outlets;
+            const ids = Array.isArray(outletsQuery)
+                ? outletsQuery
+                : outletsQuery.split(",").map(id => id.trim());
+            
+            // Only keep outlets that belong to this manager
+            selectedOutletIds = ids
+                .filter(id => managerOutletIds.includes(id))
+                .map(id => new mongoose.Types.ObjectId(id));
+        } else {
+            selectedOutletIds = managerOutlets.map(o => o._id);
+        }
+
+        if (selectedOutletIds.length === 0) {
+            return res.json([]);
+        }
+
+        // Build match query (filter by outlet and date range)
+        const matchQuery = {
+            outlet: { $in: selectedOutletIds }
+        };
+
+        if (req.query.startDate || req.query.endDate) {
+            matchQuery.date = {};
+            if (req.query.startDate) {
+                matchQuery.date.$gte = new Date(req.query.startDate);
+            }
+            if (req.query.endDate) {
+                matchQuery.date.$lte = new Date(req.query.endDate);
+            }
+        } else if (req.query.timeRange) {
+            const now = new Date();
+            matchQuery.date = {};
+            if (req.query.timeRange === "7d") {
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(now.getDate() - 7);
+                matchQuery.date.$gte = sevenDaysAgo;
+            } else if (req.query.timeRange === "30d") {
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(now.getDate() - 30);
+                matchQuery.date.$gte = thirtyDaysAgo;
+            } else if (req.query.timeRange === "90d") {
+                const ninetyDaysAgo = new Date();
+                ninetyDaysAgo.setDate(now.getDate() - 90);
+                matchQuery.date.$gte = ninetyDaysAgo;
+            }
+            
+            if (Object.keys(matchQuery.date).length === 0) {
+                delete matchQuery.date;
+            }
+        }
+
+        // Determine aggregation period format
+        const interval = req.query.interval || "daily";
+        let dateFormat = "%Y-%m-%d"; // default daily
+        if (interval === "weekly") {
+            dateFormat = "%Y-%U"; // Year-WeekNumber
+        } else if (interval === "monthly") {
+            dateFormat = "%Y-%m"; // Year-Month
+        }
+
+        // Run aggregation
+        const trends = await Sale.aggregate([
+            { $match: matchQuery },
+            {
+                $group: {
+                    _id: {
+                        outlet: "$outlet",
+                        period: { $dateToString: { format: dateFormat, date: "$date" } }
+                    },
+                    revenue: { $sum: "$totalAmount" },
+                    transactions: { $sum: 1 }
+                }
+            },
+            {
+                $lookup: {
+                    from: "outlets",
+                    localField: "_id.outlet",
+                    foreignField: "_id",
+                    as: "outletInfo"
+                }
+            },
+            { $unwind: "$outletInfo" },
+            {
+                $project: {
+                    outletId: "$_id.outlet",
+                    outletName: "$outletInfo.name",
+                    period: "$_id.period",
+                    revenue: 1,
+                    transactions: 1,
+                    _id: 0
+                }
+            },
+            { $sort: { period: 1 } }
+        ]);
+
+        res.json(trends);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server error");
+    }
+});
+
+// @route   GET api/sales/today-total
+// @desc    Get total sales for the day
+// @access  Private
+router.get("/today-total", auth, async (req, res) => {
+    try {
+        const outlets = await Outlet.find({ manager: req.user.id });
+        const outletIds = outlets.map(o => o._id);
+
+        if (outletIds.length === 0) {
+            return res.json({ todayTotal: 0 });
+        }
+
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const salesToday = await Sale.aggregate([
+            {
+                $match: {
+                    outlet: { $in: outletIds },
+                    date: { $gte: startOfToday }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    todayTotal: { $sum: "$totalAmount" }
+                }
+            }
+        ]);
+
+        const todayTotal = salesToday[0]?.todayTotal || 0;
+        res.json({ todayTotal });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server error");
+    }
+});
+
+// @route   GET api/sales/feed
+// @desc    SSE feed for real-time sales transactions
+// @access  Private
+router.get("/feed", auth, async (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const managerId = req.user.id;
+    
+    // Get manager's outlet IDs to filter events
+    let outlets = [];
+    try {
+        outlets = await Outlet.find({ manager: managerId });
+    } catch (err) {
+        console.error("SSE Outlets fetch error", err);
+    }
+    const outletIdsStr = outlets.map(o => o._id.toString());
+
+    const onNewSale = (sale) => {
+        if (sale && sale.outlet && outletIdsStr.includes(sale.outlet._id ? sale.outlet._id.toString() : sale.outlet.toString())) {
+            res.write(`data: ${JSON.stringify(sale)}\n\n`);
+        }
+    };
+
+    const dashboardEmitter = require("../utils/eventEmitter");
+    dashboardEmitter.on("new-sale", onNewSale);
+
+    // Heartbeat every 20 seconds
+    const keepAlive = setInterval(() => {
+        res.write(": keep-alive\n\n");
+    }, 20000);
+
+    req.on("close", () => {
+        clearInterval(keepAlive);
+        dashboardEmitter.removeListener("new-sale", onNewSale);
+        res.end();
+    });
+});
+
+module.exports = router;
